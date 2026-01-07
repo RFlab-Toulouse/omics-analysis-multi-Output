@@ -901,15 +901,16 @@ shinyUI(fluidPage(
                                                                 helpText("Automatic tuning uses model-specific optimization (tune.svm, tuneRF, cv.glmnet, xgb.cv, etc.)"),
                                                                 checkboxGroupInput("fstest","features selection by cross validation",choices = list("TRUE /!\\"=TRUE,"FALSE"=FALSE),inline = TRUE,selected ="FALSE"),
                                                                 helpText("/!\\ process can be long"),
-                                                                radioButtons("threshold_method_test", "Threshold optimization:",
-                                                                             c("Fixed (0.5 for probabilistic models)" = "fixed",
-                                                                               "Youden (maximize sensitivity + specificity)" = "youden",
-                                                                               "Equiprobability (equal error rate)" = "equiprob"),
-                                                                             selected = "fixed"),
-                                                                helpText("Threshold calculated on TRAIN data, applied to validation. 
-                                                                         Youden: optimal balance sens/spec. 
-                                                                         Equiprobability: minimizes FP=FN. 
-                                                                         Note: Multiple testing may slightly inflate validation metrics.")
+                                                                helpText("Multi-class classification: predicted class is the one with highest probability")
+                                                                # radioButtons("threshold_method_test", "Threshold optimization:",
+                                                                #              c("Fixed (0.5 for probabilistic models)" = "fixed",
+                                                                #                "Youden (maximize sensitivity + specificity)" = "youden",
+                                                                #                "Equiprobability (equal error rate)" = "equiprob"),
+                                                                #              selected = "fixed"),
+                                                                # helpText("Threshold calculated on TRAIN data, applied to validation. 
+                                                                #          Youden: optimal balance sens/spec. 
+                                                                #          Equiprobability: minimizes FP=FN. 
+                                                                #          Note: Multiple testing may slightly inflate validation metrics.")
                                                          ),
                                                          column(5,
                                                                 p(actionButton("tunetest",h4("Test all models"),width=200),align="center")

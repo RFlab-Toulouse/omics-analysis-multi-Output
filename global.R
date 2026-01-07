@@ -3416,6 +3416,9 @@ confusion_matrix_multiclass <- function(predicted, actual, normalize = FALSE, gr
     conf_df$Label <- as.character(conf_df$Count)
   }
   
+  # CORRECTION ICI: Définir le titre
+  plot_title <- if(normalize) "Confusion Matrix (Normalized)" else "Confusion Matrix"
+  
   # Créer le graphique
   p <- ggplot(conf_df, aes(x = Actual, y = Predicted, fill = Count)) +
     geom_tile(color = "white", size = 1) +
@@ -3423,7 +3426,7 @@ confusion_matrix_multiclass <- function(predicted, actual, normalize = FALSE, gr
     scale_fill_gradient(low = "white", high = "steelblue", 
                         name = if(normalize) "Proportion" else "Count") +
     labs(
-      title = title,
+      title = plot_title,  # CORRECTION ICI
       x = "True Class",
       y = "Predicted Class"
     ) +

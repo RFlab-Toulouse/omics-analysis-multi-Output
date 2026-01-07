@@ -163,78 +163,359 @@ shinyServer(function(input, output,session) {
   })
   
 #table des parametres
+  # statetable<-reactive({
+  #   table <- matrix(data = "",nrow = 20,ncol=11)
+  #   if((input$confirmdatabutton!=0 & !is.null(input$modelfile))){
+  #     learningfile <- DATA()$previousparameters$importparameters$learningfile
+  #   }
+  #   else{learningfile<-input$learningfile}
+  #   
+  #   table[1,1:9]<-c("#","Extensionfile","decimal character","separator character","NA string","sheet number","skip lines","consider NA as 0","transpose")
+  #   table[2,1:9]<-c("import parameters",learningfile$type,input$dec,input$sep,input$NAstring,
+  #                   input$sheetn,input$skipn,input$zeroegalNA,input$transpose)
+  #   
+  #   # ============================================================================
+  #   # CORRECTION 1: Adaptation pour multi-classe
+  #   # ============================================================================
+  #   
+  #   # Détecter le nombre de classes
+  #   n_classes_learn <- length(levels(DATA()$LEARNING[,1]))
+  #   n_classes_val <- if(!is.null(DATA()$VALIDATION)) {
+  #     length(levels(DATA()$VALIDATION[,1]))
+  #   } else {
+  #     0
+  #   }
+  #   
+  #   # Adaptation selon binaire ou multi-classe
+  #   if(n_classes_learn == 2 && (n_classes_val == 2 || n_classes_val == 0)) {
+  #     # Classification binaire - code original
+  #     table[3,]<-c("#","name learning file", "number of rows", "number of columns", 
+  #                  paste("number of ",levels(DATA()$LEARNING[,1])[1]),
+  #                  paste("number of ",levels(DATA()$LEARNING[,1])[2]),
+  #                  "name validation file", "number of rows", "number of columns", 
+  #                  paste("number of ",levels(DATA()$VALIDATION[,1])[1]),
+  #                  paste("number of ",levels(DATA()$VALIDATION[,1])[2]))
+  #     
+  #     table[4,]<-c("main results",learningfile$name,dim(DATA()$LEARNING)[1],
+  #                  dim(DATA()$LEARNING)[2],
+  #                  nll(sum(DATA()$LEARNING[,1]==levels(DATA()$LEARNING[,1])[1])),
+  #                  nll(sum(DATA()$LEARNING[,1]==levels(DATA()$LEARNING[,1])[2])),
+  #                  nll(input$validationfile$name),nll(dim(DATA()$VALIDATION)[1]),
+  #                  nll(dim(DATA()$VALIDATION)[2]),
+  #                  nll(sum(DATA()$VALIDATION[,1]==levels(DATA()$VALIDATION[,1])[1])),
+  #                  nll(sum(DATA()$VALIDATION[,1]==levels(DATA()$VALIDATION[,1])[2])))
+  #   } else {
+  #     # Classification multi-classe - version simplifiée
+  #     table[3,1:8]<-c("#","name learning file", "number of rows", "number of columns",
+  #                     "name validation file", "number of rows", "number of columns", "classes")
+  #     
+  #     table[4,1:8]<-c("main results",
+  #                     learningfile$name,
+  #                     dim(DATA()$LEARNING)[1],
+  #                     dim(DATA()$LEARNING)[2],
+  #                     nll(input$validationfile$name),
+  #                     nll(dim(DATA()$VALIDATION)[1]),
+  #                     nll(dim(DATA()$VALIDATION)[2]),
+  #                     paste(levels(DATA()$LEARNING[,1]), collapse=", "))
+  #   }
+  #   
+  #   table[5,1:8]<-c("#","percentage of values minimum","method of selection","select features structured","search structur in",
+  #                   "threshold p-value of proportion test", "maximum % values of the min group","minimum % values of the max group")
+  #   table[6,1:8]<-c("select parameters",selectdataparameters[[1]],selectdataparameters[[2]],selectdataparameters[[3]],
+  #                   selectdataparameters[[4]],selectdataparameters[[5]],selectdataparameters[[6]],selectdataparameters[[7]])
+  #   table[7,1:3]<-c("#","number of feature selected","number of feature structured")
+  #   table[8,1:3]<-c("main results",dim(SELECTDATA()$LEARNINGSELECT)[2]-1,nll(dim(SELECTDATA()$STRUCTUREDFEATURES)[2]))
+  #   table[9,1:5]<-c("#","remplace NA by","transformation log","strandardisation","arcsin transformation")
+  #   if(transformdataparameters[[1]]=="FALSE"){logprint<-"FALSE"}
+  #   else{logprint<-transformdataparameters[[2]]}
+  #   table[10,1:5]<-c("transform parameters",transformdataparameters[[5]],logprint,transformdataparameters[[3]],transformdataparameters[[4]])
+  #   table[11,1]<-c("#")
+  #   table[12,1]<-c("main results")
+  #   table[13,1:5]<-c("#","test","use Bonferroni adjustment","threshold of significativity","Fold change threshold")
+  #   table[14,1:5]<-c("test parameters",input$test,input$adjustpv,input$thresholdpv,input$thresholdFC)
+  #   table[15,1:2]<-c("#","number of differently expressed features")
+  #   table[16,1:2]<-c("main results",dim(TEST()$LEARNINGDIFF)[2]-1)
+  #   
+  #   if(input$model!="nomodel"){
+  #     table[17,1:6]<-c("#","model type","cut-off of the model","feature selection","apply model on validation","invers groups")
+  #     table[18,1:6]<-c("model parameters",input$model,"input$thresholdmodel",
+  #                      input$fs,input$adjustval,input$invers)
+  #     
+  #     cat('MODEL()$modelparameters$thresholdmodel \n')
+  #     print(MODEL()$modelparameters$thresholdmodel)
+  #     
+  #     table[19,1:8]<-c("#","number of features","AUC learning","sensibility learning","specificity learning","AUC validation","sensibility validation","specificity validation")
+  #     
+  #     # ============================================================================
+  #     # CORRECTION 2: Calcul d'AUC adapté au multi-classe
+  #     # ============================================================================
+  #     
+  #     # Calculer AUC learning
+  #     if(n_classes_learn == 2) {
+  #       # Binaire: scorelearning est un vecteur
+  #       auc_learn <- round(as.numeric(auc(roc(
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning,
+  #         quiet=TRUE
+  #       ))), digits = 3)
+  #     } else {
+  #       # Multi-classe: utiliser compute_multiclass_auc
+  #       scores_learn <- MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning
+  #       if(is.matrix(scores_learn)) {
+  #         auc_results <- compute_multiclass_auc(
+  #           MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,
+  #           scores_learn
+  #         )
+  #         auc_learn <- auc_results$auc_macro
+  #       } else {
+  #         auc_learn <- "N/A"
+  #       }
+  #     }
+  #     
+  #     # Sensibilité et spécificité (déjà adaptées au multi-classe)
+  #     sens_learn <- if(n_classes_learn == 2) {
+  #       sensibility(
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+  #       )
+  #     } else {
+  #       sensibility_multiclass(
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+  #       )
+  #     }
+  #     
+  #     spec_learn <- if(n_classes_learn == 2) {
+  #       specificity(
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+  #       )
+  #     } else {
+  #       specificity_multiclass(
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,
+  #         MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+  #       )
+  #     }
+  #     
+  #     table[20,1:5]<-c("main results",
+  #                      dim(MODEL()$DATALEARNINGMODEL$learningmodel)[2]-1,
+  #                      auc_learn,
+  #                      sens_learn,
+  #                      spec_learn)
+  #     
+  #     # Validation
+  #     if(input$adjustval){
+  #       # Calculer AUC validation
+  #       if(n_classes_val == 2) {
+  #         # Binaire
+  #         auc_val <- round(as.numeric(auc(roc(
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval,
+  #           quiet=TRUE
+  #         ))), digits = 3)
+  #       } else if(n_classes_val > 2) {
+  #         # Multi-classe
+  #         scores_val <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval
+  #         if(is.matrix(scores_val)) {
+  #           auc_results_val <- compute_multiclass_auc(
+  #             MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,
+  #             scores_val
+  #           )
+  #           auc_val <- auc_results_val$auc_macro
+  #         } else {
+  #           auc_val <- "N/A"
+  #         }
+  #       }
+  #       
+  #       # Sensibilité et spécificité validation
+  #       sens_val <- if(n_classes_val == 2) {
+  #         sensibility(
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+  #         )
+  #       } else {
+  #         sensibility_multiclass(
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+  #         )
+  #       }
+  #       
+  #       spec_val <- if(n_classes_val == 2) {
+  #         specificity(
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+  #         )
+  #       } else {
+  #         specificity_multiclass(
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,
+  #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+  #         )
+  #       }
+  #       
+  #       table[20,6:8]<-c(auc_val, sens_val, spec_val)
+  #     }
+  #   }
+  #   return(table)
+  # }) 
+  
   statetable<-reactive({
     table <- matrix(data = "",nrow = 20,ncol=11)
     if((input$confirmdatabutton!=0 & !is.null(input$modelfile))){
       learningfile <- DATA()$previousparameters$importparameters$learningfile
     }
     else{learningfile<-input$learningfile}
-
-    table[1,1:9]<-c("#","Extensionfile","decimal character","separator character","NA string","sheet number","skip lines","consider NA as 0","transpose")
-    table[2,1:9]<-c("import parameters",learningfile$type,input$dec,input$sep,input$NAstring,
-                         input$sheetn,input$skipn,input$zeroegalNA,input$transpose)
-
-    table[3,]<-c("#","name learning file", "number of rows", "number of columns", paste("number of ",levels(DATA()$LEARNING[,1])[1]),
-             paste("number of ",levels(DATA()$LEARNING[,1])[2]),"name validation file", "number of rows", "number of columns", paste("number of ",levels(DATA()$VALIDATION[,1])[1]),
-             paste("number of ",levels(DATA()$VALIDATION[,1])[2]))
-    table[4,]<-c("main results",learningfile$name,dim(DATA()$LEARNING)[1],dim(DATA()$LEARNING)[2],nll(sum(DATA()$LEARNING[,1]==levels(DATA()$LEARNING[,1])[1])),
-                 nll(sum(DATA()$LEARNING[,1]==levels(DATA()$LEARNING[,1])[2])),nll(input$validationfile$name),nll(dim(DATA()$VALIDATION)[1]),
-                 nll(dim(DATA()$VALIDATION)[2]),nll(sum(DATA()$VALIDATION[,1]==levels(DATA()$VALIDATION[,1])[1])),
-                 nll(sum(DATA()$VALIDATION[,1]==levels(DATA()$VALIDATION[,1])[2])))
-    table[5,1:8]<-c("#","percentage of values minimum","method of selection","select features structured","search structur in",
-                     "threshold p-value of proportion test", "maximum % values of the min group","minimum % values of the max group")
-    table[6,1:8]<-c("select parameters",selectdataparameters[[1]],selectdataparameters[[2]],selectdataparameters[[3]],
-                    selectdataparameters[[4]],selectdataparameters[[5]],selectdataparameters[[6]],selectdataparameters[[7]])
+    
+    table[1,1:9]<-c("#","Extensionfile","decimal character","separator character",
+                    "NA string","sheet number","skip lines","consider NA as 0","transpose")
+    table[2,1:9]<-c("import parameters",learningfile$type,input$dec,input$sep,
+                    input$NAstring,input$sheetn,input$skipn,input$zeroegalNA,input$transpose)
+    
+    # ==========================================================================
+    # Version multi-classe uniquement (simplifié)
+    # ==========================================================================
+    
+    n_classes_learn <- length(levels(DATA()$LEARNING[,1]))
+    n_classes_val <- if(!is.null(DATA()$VALIDATION)) {
+      length(levels(DATA()$VALIDATION[,1]))
+    } else {
+      0
+    }
+    
+    # Informations sur les données (sans détail par classe)
+    table[3,1:8]<-c("#","name learning file", "number of rows", "number of columns",
+                    "name validation file", "number of rows", "number of columns", "classes")
+    
+    table[4,1:8]<-c("main results",
+                    learningfile$name,
+                    dim(DATA()$LEARNING)[1],
+                    dim(DATA()$LEARNING)[2],
+                    nll(input$validationfile$name),
+                    nll(dim(DATA()$VALIDATION)[1]),
+                    nll(dim(DATA()$VALIDATION)[2]),
+                    paste(levels(DATA()$LEARNING[,1]), collapse=", "))
+    
+    # Paramètres de sélection
+    table[5,1:8]<-c("#","percentage of values minimum","method of selection",
+                    "select features structured","search structur in",
+                    "threshold p-value of proportion test", 
+                    "maximum % values of the min group",
+                    "minimum % values of the max group")
+    table[6,1:8]<-c("select parameters",
+                    selectdataparameters[[1]],
+                    selectdataparameters[[2]],
+                    selectdataparameters[[3]],
+                    selectdataparameters[[4]],
+                    selectdataparameters[[5]],
+                    selectdataparameters[[6]],
+                    selectdataparameters[[7]])
+    
+    # Résultats de sélection
     table[7,1:3]<-c("#","number of feature selected","number of feature structured")
-    table[8,1:3]<-c("main results",dim(SELECTDATA()$LEARNINGSELECT)[2]-1,nll(dim(SELECTDATA()$STRUCTUREDFEATURES)[2]))
-    table[9,1:5]<-c("#","remplace NA by","transformation log","strandardisation","arcsin transformation")
+    table[8,1:3]<-c("main results",
+                    dim(SELECTDATA()$LEARNINGSELECT)[2]-1,
+                    nll(dim(SELECTDATA()$STRUCTUREDFEATURES)[2]))
+    
+    # Paramètres de transformation
+    table[9,1:5]<-c("#","remplace NA by","transformation log",
+                    "strandardisation","arcsin transformation")
     if(transformdataparameters[[1]]=="FALSE"){logprint<-"FALSE"}
     else{logprint<-transformdataparameters[[2]]}
-    table[10,1:5]<-c("transform parameters",transformdataparameters[[5]],logprint,transformdataparameters[[3]],transformdataparameters[[4]])
+    table[10,1:5]<-c("transform parameters",
+                     transformdataparameters[[5]],
+                     logprint,
+                     transformdataparameters[[3]],
+                     transformdataparameters[[4]])
+    
+    # Tests statistiques
     table[11,1]<-c("#")
     table[12,1]<-c("main results")
-    table[13,1:5]<-c("#","test","use Bonferroni adjustment","threshold of significativity","Fold change threshold")
-    table[14,1:5]<-c("test parameters",input$test,input$adjustpv,input$thresholdpv,input$thresholdFC)
+    table[13,1:5]<-c("#","test","use Bonferroni adjustment",
+                     "threshold of significativity","Fold change threshold")
+    table[14,1:5]<-c("test parameters",input$test,input$adjustpv,
+                     input$thresholdpv,input$thresholdFC)
     table[15,1:2]<-c("#","number of differently expressed features")
     table[16,1:2]<-c("main results",dim(TEST()$LEARNINGDIFF)[2]-1)
-
+    
+    # Modélisation
     if(input$model!="nomodel"){
-      table[17,1:6]<-c("#","model type","cut-off of the model","feature selection","apply model on validation","invers groups")
-      table[18,1:6]<-c("model parameters",input$model,input$thresholdmodel,
-                       input$fs,input$adjustval,input$invers)
+      table[17,1:5]<-c("#","model type","feature selection",
+                       "apply model on validation","number of classes")
+      table[18,1:5]<-c("model parameters",
+                       input$model,
+                       input$fs,
+                       input$adjustval,
+                       n_classes_learn)
       
-      # table[17,1:6]<-c("#","model type","cut-off of the model (Youden)","feature selection",
-      #                  "apply model on validation","invers groups")
+      table[19,1:8]<-c("#","number of features","AUC learning (macro)",
+                       "sensitivity learning (macro)","specificity learning (macro)",
+                       "AUC validation (macro)","sensitivity validation (macro)",
+                       "specificity validation (macro)")
       
-      cat('MODEL()$modelparameters$thresholdmodel \n')
-      print(MODEL()$modelparameters$thresholdmodel)
-      # table[18,1:6]<-c("model parameters",input$model,
-      #                  round(MODEL()$modelparameters$thresholdmodel, 3),
-      #                  input$fs,input$adjustval,input$invers)
+      # ==========================================================================
+      # Calculs pour multi-classe (AUC macro-average)
+      # ==========================================================================
       
-      table[19,1:8]<-c("#","number of features","AUC learning","sensibility learning","specificity learning","AUC validation","sensibility validation","specificity validation")
-#       line20<<-c("main results",dim(MODEL()$DATALEARNINGMODEL$learningmodel)[2]-1,
-#                  as.numeric(auc(roc(MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning))),
-#                  sensibility(MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning),
-#                  specificity(MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning),
-#                  as.numeric(auc(roc(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval))),
-#                  sensibility(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval),
-#                  specificity(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval)
-#       )
-      table[20,1:5]<-c("main results",dim(MODEL()$DATALEARNINGMODEL$learningmodel)[2]-1,
-                  round(as.numeric(auc(roc(MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning))),digits = 3),
-                  sensibility(MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning),
-                  specificity(MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning)
-                  )
+      # AUC Learning
+      scores_learn <- MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning
+      if(is.matrix(scores_learn)) {
+        auc_results_learn <- compute_multiclass_auc(
+          MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,
+          scores_learn
+        )
+        auc_learn <- auc_results_learn$auc_macro
+      } else {
+        auc_learn <- "N/A"
+      }
+      
+      # Sensibilité et spécificité Learning
+      sens_learn <- sensibility_multiclass(
+        MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,
+        MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+      )
+      
+      spec_learn <- specificity_multiclass(
+        MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,
+        MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+      )
+      
+      # Remplir la ligne Learning
+      table[20,1:5]<-c("main results",
+                       dim(MODEL()$DATALEARNINGMODEL$learningmodel)[2]-1,
+                       auc_learn,
+                       sens_learn,
+                       spec_learn)
+      
+      # Validation
       if(input$adjustval){
-      table[20,6:8]<-c(round(as.numeric(auc(roc(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval))),digits = 3),
-                  sensibility(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval),
-                  specificity(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval)
-                  )
+        # AUC Validation
+        scores_val <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval
+        if(is.matrix(scores_val)) {
+          auc_results_val <- compute_multiclass_auc(
+            MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,
+            scores_val
+          )
+          auc_val <- auc_results_val$auc_macro
+        } else {
+          auc_val <- "N/A"
+        }
+        
+        # Sensibilité et spécificité Validation
+        sens_val <- sensibility_multiclass(
+          MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,
+          MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+        )
+        
+        spec_val <- specificity_multiclass(
+          MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,
+          MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+        )
+        
+        # Remplir les colonnes Validation
+        table[20,6:8]<-c(auc_val, sens_val, spec_val)
       }
     }
-    return(table)
     
+    return(table)
   }) 
   
   output$savestatetable<- downloadHandler(
