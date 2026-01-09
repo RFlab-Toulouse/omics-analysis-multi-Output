@@ -279,7 +279,7 @@ shinyServer(function(input, output,session) {
   #         MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
   #       )
   #     } else {
-  #       sensibility_multiclass(
+  #       sensitivity_multiclass(
   #         MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,
   #         MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
   #       )
@@ -334,7 +334,7 @@ shinyServer(function(input, output,session) {
   #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
   #         )
   #       } else {
-  #         sensibility_multiclass(
+  #         sensitivity_multiclass(
   #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,
   #           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
   #         )
@@ -468,7 +468,7 @@ shinyServer(function(input, output,session) {
       }
       
       # Sensibilité et spécificité Learning
-      sens_learn <- sensibility_multiclass(
+      sens_learn <- sensitivity_multiclass(
         MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,
         MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
       )
@@ -500,7 +500,7 @@ shinyServer(function(input, output,session) {
         }
         
         # Sensibilité et spécificité Validation
-        sens_val <- sensibility_multiclass(
+        sens_val <- sensitivity_multiclass(
           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,
           MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
         )
@@ -1254,6 +1254,9 @@ MODEL<-reactive({
                            datastructuresfeatures =  datastructuresfeatures,
                            learningselect = learningselect)
   
+  cat("on est dans le server model \n")
+  print(str(resmodel$datalearningmodel))
+  
  list("DATALEARNINGMODEL"=resmodel$datalearningmodel,"MODEL"=resmodel$model,
       "DATAVALIDATIONMODEL"=resmodel$datavalidationmodel,
       "GROUPS"=resmodel$groups,"modelparameters"=resmodel$modelparameters)
@@ -1298,8 +1301,13 @@ output$modellambda1se<-renderText({
 
 output$modelnonzerocoef<-renderText({
   if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
-    coef_matrix <- as.matrix(coef(MODEL()$MODEL$glmnet_model, s=MODEL()$MODEL$lambda))
-    sum(coef_matrix[-1,1] != 0)
+    #coef_matrix <- as.matrix(coef(MODEL()$MODEL$glmnet_model, s=MODEL()$MODEL$lambda))
+    # print(coef_matrix)
+    # print(str(coef_matrix))
+    # cat("sum(coef_matrix[-1,1] != 0)  : \n")
+    # print(sum(coef_matrix[-1,1] != 0))
+    # sum(coef_matrix[-1,1] != 0)
+    "N/A"
   } else {
     "N/A"
   }
@@ -1508,7 +1516,7 @@ output$sensibilitydecouv <- renderText({
                 class = datalearningmodel$reslearningmodel$classlearning)
   } else {
     # Multi-classe: Recall macro-average
-    sensibility_multiclass(
+    sensitivity_multiclass(
       predicted = datalearningmodel$reslearningmodel$predictclasslearning,
       actual = datalearningmodel$reslearningmodel$classlearning
     )
@@ -1531,29 +1539,31 @@ output$specificitydecouv <- renderText({
 })
 
 # Ajouter un output pour les métriques détaillées multi-classe
-output$detailed_metrics_decouv <- renderTable({
-  datalearningmodel <- MODEL()$DATALEARNINGMODEL
-  if(length(levels(datalearningmodel$reslearningmodel$classlearning)) > 2) {
-    metrics <- multiclass_metrics(
-      predicted = datalearningmodel$reslearningmodel$predictclasslearning,
-      actual = datalearningmodel$reslearningmodel$classlearning,
-      average = "macro"
-    )
-    metrics$per_class
-  }
-}, include.rownames = FALSE)
+# output$detailed_metrics_decouv <- renderTable({
+#   datalearningmodel <- MODEL()$DATALEARNINGMODEL
+#   cat("dans detailed_metrics_decouv :  datalearningmodel : \n")
+#   print(str(datalearningmodel))
+#   if(length(levels(datalearningmodel$reslearningmodel$classlearning)) > 2) {
+#     metrics <- multiclass_metrics(
+#       predicted = datalearningmodel$reslearningmodel$predictclasslearning,
+#       actual = datalearningmodel$reslearningmodel$classlearning,
+#       average = "macro"
+#     )
+#     metrics$per_class
+#   }
+# }, include.rownames = FALSE)
 
-output$average_metrics_decouv <- renderTable({
-  datalearningmodel <- MODEL()$DATALEARNINGMODEL
-  if(length(levels(datalearningmodel$reslearningmodel$classlearning)) > 2) {
-    metrics <- multiclass_metrics(
-      predicted = datalearningmodel$reslearningmodel$predictclasslearning,
-      actual = datalearningmodel$reslearningmodel$classlearning,
-      average = "macro"
-    )
-    metrics$average
-  }
-}, include.rownames = FALSE)
+# output$average_metrics_decouv <- renderTable({
+#   datalearningmodel <- MODEL()$DATALEARNINGMODEL
+#   if(length(levels(datalearningmodel$reslearningmodel$classlearning)) > 2) {
+#     metrics <- multiclass_metrics(
+#       predicted = datalearningmodel$reslearningmodel$predictclasslearning,
+#       actual = datalearningmodel$reslearningmodel$classlearning,
+#       average = "macro"
+#     )
+#     metrics$average
+#   }
+# }, include.rownames = FALSE)
 
 
 # metrique de clssse detaillées 
@@ -1564,11 +1574,10 @@ output$detailed_metrics_decouv <- renderTable({
   
   tryCatch({
     model_result <- MODEL()
-    
-    if(!is.null(model_result$datalearningmodel)) {
-      predicted <- model_result$datalearningmodel$reslearningmodel$predictclasslearning
-      actual <- model_result$datalearningmodel$reslearningmodel$classlearning
-      scores <- model_result$datalearningmodel$reslearningmodel$scorelearning
+    if(!is.null(model_result$DATALEARNINGMODEL)) {
+      predicted <- model_result$DATALEARNINGMODEL$reslearningmodel$predictclasslearning
+      actual <- model_result$DATALEARNINGMODEL$reslearningmodel$classlearning
+      scores <- model_result$DATALEARNINGMODEL$reslearningmodel$scorelearning
       
       # Calculer les métriques
       metrics <- compute_multiclass_metrics(predicted, actual)
@@ -1592,7 +1601,7 @@ output$detailed_metrics_decouv <- renderTable({
       result_df <- data.frame(
         Class = classes,
         Precision = round(metrics$precision_per_class, 3),
-        Recall = round(metrics$recall_per_class, 3),
+        sensitivity = round(metrics$recall_per_class, 3),
         F1_Score = round(metrics$f1_per_class, 3),
         AUC = round(auc_per_class, 3),
         stringsAsFactors = FALSE
@@ -1604,12 +1613,12 @@ output$detailed_metrics_decouv <- renderTable({
     data.frame(
       Class = "Error",
       Precision = e$message,
-      Recall = "",
+      sensitivity = "",
       F1_Score = "",
       AUC = ""
     )
   })
-}, include.rownames = FALSE)
+}, striped = TRUE, hover = TRUE, bordered = TRUE)
 
 # Learning - Métriques moyennes
 output$average_metrics_decouv <- renderTable({
@@ -1618,10 +1627,10 @@ output$average_metrics_decouv <- renderTable({
   tryCatch({
     model_result <- MODEL()
     
-    if(!is.null(model_result$datalearningmodel)) {
-      predicted <- model_result$datalearningmodel$reslearningmodel$predictclasslearning
-      actual <- model_result$datalearningmodel$reslearningmodel$classlearning
-      scores <- model_result$datalearningmodel$reslearningmodel$scorelearning
+    if(!is.null(model_result$DATALEARNINGMODEL)) {
+      predicted <- model_result$DATALEARNINGMODEL$reslearningmodel$predictclasslearning
+      actual <- model_result$DATALEARNINGMODEL$reslearningmodel$classlearning
+      scores <- model_result$DATALEARNINGMODEL$reslearningmodel$scorelearning
       
       # Calculer les métriques de base
       metrics <- compute_multiclass_metrics(predicted, actual)
@@ -1703,7 +1712,7 @@ output$downloaddetailedmetricsdecouv <- downloadHandler(
       downloaddataset(rbind(
         cbind(Type = "Per Class", metrics$per_class),
         cbind(Type = "Average", Metric = metrics$average$Metric, 
-              Precision = NA, Recall = NA, F1_Score = NA, 
+              Precision = NA, sensitivity = NA, F1_Score = NA, 
               Support = metrics$average$Value)
       ), file)
     }
@@ -1717,10 +1726,10 @@ output$detailed_metrics_val <- renderTable({
   tryCatch({
     model_result <- MODEL()
     
-    if(!is.null(model_result$datavalidationmodel)) {
-      predicted <- model_result$datavalidationmodel$resvalidationmodel$predictclassval
-      actual <- model_result$datavalidationmodel$resvalidationmodel$classval
-      scores <- model_result$datavalidationmodel$resvalidationmodel$scoreval
+    if(!is.null(model_result$DATAVALIDATIONMODEL)) {
+      predicted <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval
+      actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
+      scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$scoreval
       
       # Calculer les métriques
       metrics <- compute_multiclass_metrics(predicted, actual)
@@ -1744,7 +1753,7 @@ output$detailed_metrics_val <- renderTable({
       result_df <- data.frame(
         Class = classes,
         Precision = round(metrics$precision_per_class, 3),
-        Recall = round(metrics$recall_per_class, 3),
+        sensitivity = round(metrics$recall_per_class, 3),
         F1_Score = round(metrics$f1_per_class, 3),
         AUC = round(auc_per_class, 3),
         stringsAsFactors = FALSE
@@ -1756,7 +1765,7 @@ output$detailed_metrics_val <- renderTable({
     data.frame(
       Class = "Error",
       Precision = e$message,
-      Recall = "",
+      sensitivity = "",
       F1_Score = "",
       AUC = ""
     )
@@ -1769,11 +1778,11 @@ output$average_metrics_val <- renderTable({
   
   tryCatch({
     model_result <- MODEL()
-    
-    if(!is.null(model_result$datavalidationmodel)) {
-      predicted <- model_result$datavalidationmodel$resvalidationmodel$predictclassval
-      actual <- model_result$datavalidationmodel$resvalidationmodel$classval
-      scores <- model_result$datavalidationmodel$resvalidationmodel$scoreval
+    # MODEL()$DATAVALIDATIONMODEL
+    if(!is.null(model_result$DATAVALIDATIONMODEL)) {
+      predicted <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval
+      actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
+      scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$scoreval
       
       # Calculer les métriques de base
       metrics <- compute_multiclass_metrics(predicted, actual)
@@ -1846,7 +1855,7 @@ output$downloaddetailedmetricsval <- downloadHandler(
       downloaddataset(rbind(
         cbind(Type = "Per Class", metrics$per_class),
         cbind(Type = "Average", Metric = metrics$average$Metric, 
-              Precision = NA, Recall = NA, F1_Score = NA, 
+              Precision = NA, sensitivity = NA, F1_Score = NA, 
               Support = metrics$average$Value)
       ), file)
     }
@@ -1865,10 +1874,29 @@ output$plotmodelvalroc <- renderPlot({
   
   tryCatch({
     model_result <- MODEL()
+    # cat("affichage de tete de model_result \n")
+    # print(str(model_result))
+    # cat("affichage  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval:  \n")
+    # print(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval)
+    # cat("affichage de class score \n")
+    # print(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval)
+    # cat("dans  plotmodelvalroc \n")
+    # cat("affichage de model_result$DATAVALIDATIONMODEL \n")
+    # print(str(model_result$DATAVALIDATIONMODEL))
+    # cat("affichage des score val \n")
+    # print(head(model_result$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(model_result$DATAVALIDATIONMODEL$resvalidationmodel) - 1)]))
     
-    if(!is.null(model_result$datavalidationmodel)) {
-      actual <- model_result$datavalidationmodel$resvalidationmodel$classval
-      scores <- model_result$datavalidationmodel$resvalidationmodel$scoreval
+    if(!is.null(model_result$DATAVALIDATIONMODEL$resvalidationmodel)) {
+      actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
+      scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(model_result$DATAVALIDATIONMODEL$resvalidationmodel) - 1)]
+        #model_result$datavalidationmodel$resvalidationmodel$scoreval
+      
+      scores =  as.matrix(scores)
+      print(dim(scores))
+      
+      # cat("nrow of scores :  ", nrow(scores), "\n")
+      # cat("ncol of scores :  ", ncol(scores), "\n")
+      # cat("length of actual :  ", length(actual), "\n")
       
       # Détecter si multi-classe ou binaire
       n_classes <- length(levels(actual))
@@ -1906,7 +1934,17 @@ output$plotmodelvalroc <- renderPlot({
 output$downloadplotvalroc = downloadHandler(
   filename = function() {paste('graph','.',input$paramdownplot, sep='')},
   content = function(file) {
-    ggsave(file, plot =ROCcurve(validation =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,decisionvalues =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval),  device = input$paramdownplot)},
+    req( MODEL()$DATAVALIDATIONMODEL$resvalidationmodel)
+    actual =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+    scores =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel) - 1)]
+    scores =  as.matrix(scores)
+    ggsave(file, plot = ROCcurve(validation =  actual,
+                                decisionvalues =  scores,
+                                maintitle = "ROC Curves (One-vs-All) - Validation",
+                                graph = TRUE,
+                                ggplot = TRUE
+                                ),  
+           device = input$paramdownplot)},
   contentType=NA)
 
 # Download data ROC validation
@@ -1941,15 +1979,29 @@ output$downloaddatavalroc <- downloadHandler(
 #     downloaddataset(   scoremodelplot(class = MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval ,score =MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval,names=rownames(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel),
 #                                       threshold =input$thresholdmodel ,type =input$plotscoremodel,graph = F), file) })
 
+# affichage courbe ROC learning
 output$plotmodeldecouvroc <- renderPlot({
   req(MODEL())
   
   tryCatch({
     model_result <- MODEL()
+    # cat("affichage  MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning:  \n")
+    # print(MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning)
+    # cat("affichage de class score \n")
+    # print(MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning)
+    # cat("dans  plotmodeldecouvroc \n")
+    # cat("affichage de model_result$DATALEARNINGMODEL \n")
+    # print(str(model_result$DATALEARNINGMODEL))
     
-    if(!is.null(model_result$datalearningmodel)) {
-      actual <- model_result$datalearningmodel$reslearningmodel$classlearning
-      scores <- model_result$datalearningmodel$reslearningmodel$scorelearning
+    # cat("affichage des score leaning \n")
+    # print(head(model_result$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(model_result$DATALEARNINGMODEL$reslearningmodel) - 1)]))
+    
+    if(!is.null(model_result$DATALEARNINGMODEL$reslearningmodel)) {
+      actual <- model_result$DATALEARNINGMODEL$reslearningmodel$classlearning
+      scores <- model_result$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(model_result$DATALEARNINGMODEL$reslearningmodel) - 1)]
+        #model_result$DATALEARNINGMODEL$reslearningmodel$scorelearning
+      
+      scores =  as.matrix(scores)
       
       # Détecter si multi-classe ou binaire
       n_classes <- length(levels(actual))
@@ -2009,10 +2061,23 @@ output$nClasses <- renderText({
 output$downloadplotdecouvroc <- downloadHandler(
   filename = function() { paste('roc_curve_learning.', input$paramdownplot, sep='') },
   content = function(file) {
+    
+    req(MODEL())
+    model_result <- MODEL()
+      
+    actual <- model_result$DATALEARNINGMODEL$reslearningmodel$classlearning
+    scores <- model_result$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(model_result$DATALEARNINGMODEL$reslearningmodel) - 1)]
+    
+    scores =  as.matrix(scores)
+    
     p <- ROCcurve(
-      validation = MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,
-      decisionvalues = MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning
+      validation = actual,
+      decisionvalues = scores,
+      maintitle = "ROC Curves (One-vs-All) - Training",
+      graph = TRUE,
+      ggplot = TRUE
     )
+    
     ggsave(file, plot = p, device = input$paramdownplot)
   },
   contentType = NA
@@ -2082,10 +2147,10 @@ output$tabmodelval <- renderPlot({
   tryCatch({
     model_result <- MODEL()
     
-    if(!is.null(model_result$datavalidationmodel)) {
+    if(!is.null(model_result$DATAVALIDATIONMODEL)) {
       # Extraire les prédictions et vraies classes
-      predicted <- model_result$datavalidationmodel$resvalidationmodel$predictclassval
-      actual <- model_result$datavalidationmodel$resvalidationmodel$classval
+      predicted <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval
+      actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
       
       # Déterminer si on normalise
       normalize <- if(!is.null(input$normalize_confusion)) {
@@ -2099,8 +2164,9 @@ output$tabmodelval <- renderPlot({
         predicted = predicted,
         actual = actual,
         normalize = normalize,
-        graph = TRUE,
-        title = "Confusion Matrix - Validation Set"
+        graph = TRUE
+        # ,
+        # title = "Confusion Matrix - Validation Set"
       )
     } else {
       # Pas de données de validation
@@ -2193,7 +2259,11 @@ output$confusionmatrix_learning <- renderPlot({
 
 # Validation - Sensibility (Recall)
 output$sensibilityval <- renderText({
+  req(MODEL()$DATAVALIDATIONMODEL)
   datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+  cat("Dans output$sensibilityval \n")
+  print(str(datavalidationmodel$resvalidationmodel))
+  print(head(datavalidationmodel$resvalidationmodel))
   if(length(levels(datavalidationmodel$resvalidationmodel$classval)) == 2) {
     # Binaire
     sensibility(
@@ -2202,7 +2272,7 @@ output$sensibilityval <- renderText({
     )
   } else {
     # Multi-classe
-    sensibility_multiclass(
+    sensitivity_multiclass(
       predicted = datavalidationmodel$resvalidationmodel$predictclassval,
       actual = datavalidationmodel$resvalidationmodel$classval
     )

@@ -1,6 +1,6 @@
 library(shiny)
 
-THEMES = c( "cerulean", "cosmo", "cyborg", "darkly", "flatly", "journal",
+THEMES = c("cerulean", "cosmo", "cyborg", "darkly", "flatly", "journal",
             "litera", "lumen", "lux", "materia", "minty", "pulse", "sandstone", "simplex", "sketchy",
             "slate", "solar", "spacelab", "superhero", "united", "yeti",
             "quartz", "morph", "minty", #"vapor" ,
@@ -727,28 +727,47 @@ shinyUI(fluidPage(
                                                                                  downloadButton('downloaddatadecouvroc', 'Download raw data'),align="center")
                                                                         ),
                                                                         column(4,
-                                                                               plotOutput("plotmodeldecouvbp")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                                               p(downloadButton("downloadplotmodeldecouvbp","Download plot"),
-                                                                                 downloadButton('downloaddatamodeldecouvbp', 'Download raw data'),align="center")
+                                                                               plotOutput("tabmodeldecouv", height = "400px")
+                                                                               
+                                                                               # plotOutput("plotmodeldecouvbp")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                                               # p(downloadButton("downloadplotmodeldecouvbp","Download plot"),
+                                                                               #   downloadButton('downloaddatamodeldecouvbp', 'Download raw data'),align="center")
                                                                         ),
                                                                         column(2,
-                                                                               conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames1","show indivuals names",value=FALSE)),
-                                                                               br(),
-                                                                               plotOutput("tabmodeldecouv", height = "400px"),
-                                                                               "Sensibility = ",textOutput("sensibilitydecouv",inline=T), 
-                                                                               br(),
-                                                                               "Specificity = ",textOutput("specificitydecouv",inline=T) ,
-                                                                               conditionalPanel(
-                                                                                         condition = "output.fileUploaded",
-                                                                                         h4("Métriques Détaillées par Classe"),
-                                                                                         tableOutput("detailed_metrics_decouv"),
-                                                                                         h4("Métriques Moyennes"),
-                                                                                         tableOutput("average_metrics_decouv")
-                                                                               )
+                                                                               conditionalPanel(condition="input.plotscoremodel=='points'",
+                                                                                                checkboxInput("shownames1","show indivuals names",value=FALSE)
+                                                                                                ),
+                                                                                 br(),
+                                                                               
+                                                                               h4("Métriques Moyennes"),
+                                                                               tableOutput("average_metrics_decouv")
+                                                                               # ,
+                                                                               # 
+                                                                               #   "Sensibility = ",textOutput("sensibilitydecouv",inline=T), 
+                                                                               #   br(),
+                                                                               #   "Specificity = ",textOutput("specificitydecouv",inline=T) #,
+                                                                               #   conditionalPanel(
+                                                                               #             condition = "output.fileUploaded",
+                                                                               #             h4("Métriques Détaillées par Classe"),
+                                                                               #             tableOutput("detailed_metrics_decouv"),
+                                                                               #             h4("Métriques Moyennes"),
+                                                                               #             tableOutput("average_metrics_decouv")
+                                                                               # )
                                                                                # br(),hr(),br(),
                                                                                # tableOutput("youndendecouv")
                                                                                
+                                                                        ),
+                                                                        fluidRow(
+                                                                          column(
+                                                                            width = 7
+                                                                          ),
+                                                                          column(
+                                                                            5,
+                                                                            h4("Métriques Détaillées par Classe"),
+                                                                            tableOutput("detailed_metrics_decouv"),
+                                                                          )
                                                                         )
+                                                                        
                                                                       ),
                                                                       hr(),
                                                                       conditionalPanel(condition ="input.adjustval==true  ",
@@ -763,27 +782,32 @@ shinyUI(fluidPage(
                                                                                                 p(downloadButton("downloadplotvalroc","Download plot"),
                                                                                                   downloadButton('downloaddatavalroc', 'Download raw data'),align="center")
                                                                                          ),
-                                                                                         column(4,plotOutput("plotmodelvalbp")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                                                                p(downloadButton("downloadplotmodelvalbp","Download plot"),
-                                                                                                  downloadButton('downloaddatamodelvalbp', 'Download raw data'),align="center")
-                                                                                         ),
+                                                                                         column(4,
+                                                                                                plotOutput("tabmodelval", height = "400px")
+                                                                                                
+                                                                                                ),
                                                                                          column(2,
                                                                                                 #conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames2","show indivuals names",value=FALSE)),
-                                                                                                plotOutput("tabmodelval", height = "400px"),
-                                                                                                "Sensibility = ",textOutput("sensibilityval",inline=T), 
-                                                                                                br(),
-                                                                                                "Specificity = ",textOutput("specificityval",inline=T),
-                                                                                                conditionalPanel(
-                                                                                                        condition = "output.fileUploadedval",
-                                                                                                        h4("Métriques Détaillées par Classe"),
-                                                                                                        tableOutput("detailed_metrics_val"),
-                                                                                                        h4("Métriques Moyennes"),
-                                                                                                        tableOutput("average_metrics_val")
-                                                                                                )
+                                                                                                h4("Métriques Moyennes"),
+                                                                                                tableOutput("average_metrics_val")
+                                                                                                # ,
+                                                                                                # "Sensibility = ",textOutput("sensibilityval",inline=T), 
+                                                                                                # br(),
+                                                                                                # "Specificity = ",textOutput("specificityval",inline=T)
+                                                                                                
                                                                                                 # 
                                                                                                 # br(),hr(),br(),
                                                                                                 # tableOutput("youndenval")
                                                                                                 
+                                                                                         ),
+                                                                                         fluidRow(
+                                                                                           column(7
+                                                                                                  ),
+                                                                                           column(
+                                                                                             width = 5,
+                                                                                             h4("Métriques Détaillées par Classe"),
+                                                                                             tableOutput("detailed_metrics_val"),
+                                                                                           )
                                                                                          )
                                                                                        )
                                                                       )

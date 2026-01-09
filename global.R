@@ -1607,8 +1607,8 @@ modelfunction <- function(learningmodel, validation, modelparameters,
     
     # Définir les groupes/niveaux
     lev <- levels(learningmodel[,1])
-    groups <- c("positif" = lev[1], "negatif" = lev[2])
-    lev <- groups[c("positif","negatif")]
+    # groups <- c("positif" = lev[1], "negatif" = lev[2])
+    # lev <- groups[c("positif","negatif")]
     
     # Détecter si classification binaire ou multi-classe
     n_classes <- length(levels(learningmodel[,1]))
@@ -1629,6 +1629,8 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       lev <- levels(learningmodel[,1])
     }
     
+    cat("the levels are : \n")
+    print(lev)
     # Variable pour stocker le modèle
     model <- NULL
     classlearning <- learningmodel[,1]
@@ -1726,16 +1728,20 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       } else {
         # Classification multi-classe
         scorelearning <- model$votes  # Matrice n_samples x n_classes
+        cat("scorelearning dimensions: nombre de lignes : ", dim(scorelearning)[1]," et ncol : ", dim(scorelearning)[2],"\n")
         colnames(scorelearning) <- paste("Prob", lev, sep="_")
+        cat("scorelearning dans le train  : \n")
+        print(head(scorelearning))
         # Prédiction = classe avec la probabilité maximale
-        predictclasslearning <- randomForest:::predict.randomForest(model, learningmodel[,-1])
+        predictclasslearning <- randomForest:::predict.randomForest(model, learningmodel)
         predictclasslearning <- as.factor(predictclasslearning)
+        cat("affchage de la prediction \n")
+        print(head(predictclasslearning) )
+        cat("class of predictclasslearning :", class(predictclasslearning), "\n" )
+        cat("predictclasslearning dimensions: nombre de lignes : ", dim(predictclasslearning)[1]," et ncol : ", dim(predictclasslearning)[2],"\n")
       }
     }
     
-    # ==========================================================================
-    # SVM
-    # ==========================================================================
     
     if(modelparameters$modeltype == "svm"){
       cat("\n--- Training SVM ---\n")
@@ -1796,14 +1802,18 @@ modelfunction <- function(learningmodel, validation, modelparameters,
                      kernel = kernel_param, 
                      cost = cost_param, 
                      gamma = gamma_param,
+                     scale = FALSE,
                      probability = TRUE)  # Important pour multi-classe!
+        
+        cat("affchage du modele svm  :  \n")
+        print(model)
         
         model$cost <- cost_param
         model$gamma <- gamma_param
         model$kernel <- kernel_param
         
         # Obtenir les probabilités
-        pred_with_prob <- predict(model, learningmodel[,-1], probability = TRUE)
+        pred_with_prob <- e1071:::predict.svm(model, learningmodel[,-1], probability = TRUE)
         scorelearning <- attr(pred_with_prob, "probabilities")
         
         # Réorganiser les colonnes pour correspondre à l'ordre de lev
@@ -1821,9 +1831,6 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       predictclasslearning <- as.factor(predictclasslearning)
     }
     
-    # ==========================================================================
-    #  ELASTICNET / LASSO / RIDGE
-    # ==========================================================================
     
     if(modelparameters$modeltype == "elasticnet"){
       cat("\n--- Training ElasticNet ---\n")
@@ -2002,10 +2009,10 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       } else {
         # Classification multi-classe
         if(inherits(model$glmnet_model, "cv.glmnet")){
-          score_array <- predict(model$glmnet_model, newx = x, 
+          score_array <- glmnet:::predict.cv.glmnet(model$glmnet_model, newx = x, 
                                  s = lambda_param, type = "response")
         } else {
-          score_array <- predict(model$glmnet_model, newx = x, 
+          score_array <- glmnet::predict.glmnet(model$glmnet_model, newx = x, 
                                  s = lambda_param, type = "response")
         }
         
@@ -2035,9 +2042,6 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       predictclasslearning <- as.factor(predictclasslearning)
     }
     
-    # ==========================================================================
-    #  XGBOOST
-    # ==========================================================================
     
     if(modelparameters$modeltype == "xgboost"){
       cat("\n--- Training XGBoost ---\n")
@@ -2206,7 +2210,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       
       # Make predictions
       if(is_binary) {
-        scorelearning <- predict(model, x)
+        scorelearning <- xgboost:::predict.xgb.Booster(model, x)
         scorelearning <- data.frame(scorelearning)
         colnames(scorelearning) <- paste(lev[1],"/",lev[2],sep="")
         
@@ -2215,7 +2219,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         predictclasslearning[which(scorelearning < modelparameters$thresholdmodel)] <- lev["negatif"]
       } else {
         # Prédictions multi-classe (matrice de probabilités)
-        score_matrix <- predict(model, x, reshape = TRUE)
+        score_matrix <- xgboost:::predict.xgb.Booster(model, x, reshape = TRUE)
         scorelearning <- score_matrix
         colnames(scorelearning) <- paste("Prob", lev, sep="_")
         
@@ -2226,10 +2230,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       predictclasslearning <- as.factor(predictclasslearning)
     }
     
-    # ==========================================================================
-    #  LIGHTGBM
-    # ==========================================================================
-    
+   
     if(modelparameters$modeltype == "lightgbm"){
       cat("\n--- Training LightGBM ---\n")
       
@@ -2345,10 +2346,6 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       predictclasslearning <- as.factor(predictclasslearning)
     }
     
-    # ==========================================================================
-    #  NAIVE BAYES
-    # ==========================================================================
-    
     if(modelparameters$modeltype == "naivebayes"){
       cat("\n--- Training Naive Bayes ---\n")
       
@@ -2396,7 +2393,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       cat("  Laplace smoothing:", optimal_laplace, "\n")
       
       # Make predictions
-      pred_probs <- predict(model, learningmodel[,-1], type = "raw")
+      pred_probs <- e1071:::predict.naiveBayes(model, learningmodel[,-1], type = "raw")
       
       if(is_binary) {
         scorelearning <- data.frame(pred_probs[, lev["positif"]])
@@ -2415,9 +2412,6 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       predictclasslearning <- as.factor(predictclasslearning)
     }
     
-    # ==========================================================================
-    #  KNN
-    # ==========================================================================
     
     if(modelparameters$modeltype == "knn"){
       cat("\n--- Training KNN ---\n")
@@ -2569,10 +2563,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       predictclasslearning <- as.factor(predictclasslearning)
     }
     
-    # ==========================================================================
-    #  FORMAT DE SORTIE LEARNING
-    # ==========================================================================
-    
+     
     if(is_binary) {
       # Format binaire original
       reslearningmodel <- data.frame(classlearning, scorelearning, predictclasslearning)
@@ -2580,6 +2571,11 @@ modelfunction <- function(learningmodel, validation, modelparameters,
     } else {
       # Format multi-classe
       reslearningmodel <- data.frame(classlearning, scorelearning, predictclasslearning)
+      # reslearningmodel <- list(
+      #   "classlearning" = classlearning,
+      #   "scorelearning" = scorelearning,
+      #   "predictclasslearning" = predictclasslearning
+      # )
       score_cols <- paste("score", lev, sep="_")
       colnames(reslearningmodel) <- c("classlearning", score_cols, "predictclasslearning")
     }
@@ -2654,11 +2650,24 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         validationmodel[,-1] <- scale(validationmodel[,-1])
       }
       
+      classval <- validationmodel[,1]
+      
+      # Vérifications de débogage
+      cat("\n=== Validation class captured ===\n")
+      cat("classval type:", class(classval), "\n")
+      cat("classval levels:", paste(levels(classval), collapse=", "), "\n")
+      cat("classval head:", paste(head(classval), collapse=", "), "\n")
+      
       # Select same features as training
       common_features <- intersect(colnames(learningmodel), colnames(validationmodel))
-      validationmodel <- validationmodel[, common_features]
+      cat("checking des colonnes de validation par rapport au modele d'apprentissage...\n")
+      print(intersect(colnames(learningmodel), colnames(validationmodel)))
+      validationmodel <- cbind(validationmodel[,1], validationmodel[, common_features])
+      colnames(validationmodel)[1] <- "group"
       
-      classval <- validationmodel[,1]
+      # classval <- validationmodel[,1]
+      cat("varification que la premiere colonne est bien le groupe:\n")
+      print((table(validationmodel[,1])))
       
       # Make predictions based on model type
       if(modelparameters$modeltype == "randomforest"){
@@ -2684,7 +2693,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
           predictclassval[which(scoreval >= modelparameters$thresholdmodel)] <- lev["positif"]
           predictclassval[which(scoreval < modelparameters$thresholdmodel)] <- lev["negatif"]
         } else {
-          pred_with_prob <- predict(model, validationmodel[,-1], probability=TRUE)
+          pred_with_prob <- e1071:::predict.svm(model, validationmodel[,-1], probability=TRUE)
           scoreval <- attr(pred_with_prob, "probabilities")
           if(!is.null(colnames(scoreval))) {
             col_order <- match(lev, colnames(scoreval))
@@ -2717,10 +2726,10 @@ modelfunction <- function(learningmodel, validation, modelparameters,
           predictclassval[which(scoreval < modelparameters$thresholdmodel)] <- lev["negatif"]
         } else {
           if(inherits(model$glmnet_model, "cv.glmnet")){
-            score_array <- predict(model$glmnet_model, newx=x_val, 
+            score_array <- glmnet:::predict.cv.glmnet(model$glmnet_model, newx=x_val, 
                                    s=model$lambda, type="response")
           } else {
-            score_array <- predict(model$glmnet_model, newx=x_val, 
+            score_array <- glmnet::predict.glmnet(model$glmnet_model, newx=x_val, 
                                    s=model$lambda, type="response")
           }
           
@@ -2750,7 +2759,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         x_val <- as.matrix(validationmodel[,-1])
         
         if(is_binary) {
-          scoreval <- predict(model, x_val)
+          scoreval <- xgboost:::predict.xgb.Booster(model, x_val)
           scoreval <- data.frame(scoreval)
           colnames(scoreval) <- paste(lev[1],"/",lev[2],sep="")
           
@@ -2758,7 +2767,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
           predictclassval[which(scoreval >= modelparameters$thresholdmodel)] <- lev["positif"]
           predictclassval[which(scoreval < modelparameters$thresholdmodel)] <- lev["negatif"]
         } else {
-          score_matrix <- predict(model, x_val, reshape = TRUE)
+          score_matrix <- xgboost:::predict.xgb.Booster(model, x_val, reshape = TRUE)
           scoreval <- score_matrix
           colnames(scoreval) <- paste("Prob", lev, sep="_")
           
@@ -2791,7 +2800,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       }
       
       if(modelparameters$modeltype == "naivebayes"){
-        pred_probs_val <- predict(model, validationmodel[,-1], type="raw")
+        pred_probs_val <- e1071:::predict.naiveBayes(model, validationmodel[,-1], type="raw")
         
         if(is_binary) {
           scoreval <- data.frame(pred_probs_val[, lev["positif"]])
@@ -2856,8 +2865,8 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       rownames(resvalidationmodel) <- rownames(validationmodel)
       
       datavalidationmodel <- list(
-        "validationmodel" = validationmodel,
-        "resvalidationmodel" = resvalidationmodel
+        "validationmodel" = validationmodel,  # contient les features et la classe
+        "resvalidationmodel" = resvalidationmodel # contient les résultats de la prédiction
       )
       
       cat("Validation samples:", nrow(validationmodel), "\n")
@@ -2865,7 +2874,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
     }
     
     # ==========================================================================
-    # PARTIE 11: RETURN
+    # RETURN
     # ==========================================================================
     
     cat("\n=== Model training completed successfully ===\n\n")
@@ -2909,6 +2918,9 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
   validation <- factor(validation, levels = rev(levels(validation)), ordered = TRUE)
   n_classes <- length(levels(validation))
   
+  cat("affcihege de la n_classes:", n_classes, "\n")
+  cat("affichage de la tete des proba dans roccurve : \n")
+  print(head(decisionvalues))
   # Pour la classification binaire, garder le comportement original
   if(n_classes == 2 && !is.matrix(decisionvalues)) {
     res <- roc(validation, decisionvalues, quiet = TRUE)
@@ -2942,7 +2954,12 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
         theme(
           plot.title = element_text(size = 15, face = "bold"),
           axis.text = element_text(size = 12),
-          axis.title = element_text(size = 14, face = "bold")
+          axis.title = element_text(size = 14, face = "bold"),
+          legend.position = c(0.8, 0.2),
+          axis.text.x = element_text(size = 12 ,  face = 'bold' ) ,
+          axis.text.y =  element_text(size = 12 , face =  'bold'),
+          axis.title.x = element_text(size = 15 , face = 'bold'), 
+          axis.title.y =  element_text(size = 15 , face = 'bold')
         ) +
         coord_fixed()
       
@@ -3013,9 +3030,14 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
     ))
   }
   
+  
+     
+    
   if(ggplot){
     # Créer le graphique avec toutes les courbes ROC
-    col <- gg_color_hue(n_classes + 1)
+    colords_ref = c("#FF4C4C", "#4C9AFF", "#FFA500", "#9B59FF", "#3EB489", 
+                     "#33FF57",  "#FF1493",  "#FF4500", "#00CED1")
+    col <-  colords_ref[1:(n_classes+1)] #gg_color_hue(n_classes + 1)
     bin <- 0.01
     diag <- data.frame(x = seq(0, 1, by = bin), y = seq(0, 1, by = bin))
     
@@ -3026,13 +3048,17 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
     p <- ggplot() +
       geom_line(data = diag, aes(x = x, y = y), 
                 color = "gray50", linetype = "dashed", size = 0.8) +
-      geom_line(data = roc_data, 
+      # geom_line(data = roc_data, 
+      #           aes(x = FPR, y = TPR, color = Class_Label), 
+      #           size = 1.2) +
+      geom_step(data = roc_data, 
                 aes(x = FPR, y = TPR, color = Class_Label), 
-                size = 1.2) +
+                direction = "vh", 
+                size = 1.2)+ 
       labs(
         title = paste0(maintitle, " (Mean AUC = ", round(mean_auc, 3), ")"),
-        x = "False Positive Rate (1 - Specificity)",
-        y = "True Positive Rate (Sensitivity)",
+        x = "1 - Specificity",
+        y = "Sensitivity",
         color = "Class"
       ) +
       theme_minimal() +
@@ -3040,12 +3066,16 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
         plot.title = element_text(size = 15, face = "bold"),
         axis.text = element_text(size = 12),
         axis.title = element_text(size = 14, face = "bold"),
-        legend.position = "right",
+        legend.position = c(0.8, 0.2),
         legend.title = element_text(size = 12, face = "bold"),
-        legend.text = element_text(size = 10),
-        panel.grid.minor = element_blank()
+        legend.text = element_text(size = 10, face = "bold"),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(size = 12 ,  face = 'bold' ) ,
+        axis.text.y =  element_text(size = 12 , face =  'bold'),
+        axis.title.x = element_text(size = 15 , face = 'bold'), 
+        axis.title.y =  element_text(size = 15 , face = 'bold')
       ) +
-      coord_fixed() +
+       #coord_fixed() +
       scale_color_manual(values = col[1:n_classes])
     
     return(p)
@@ -3299,6 +3329,30 @@ multiclass_metrics <- function(predicted, actual, average = "macro") {
   # predicted: vecteur de classes prédites
   # actual: vecteur de classes réelles
   # average: "macro" (moyenne non pondérée) ou "weighted" (pondérée par support)
+   
+  if(!is.factor(predicted)) {
+    stop("predicted doit être un facteur, mais est de type: ", class(predicted))
+  }
+  if(!is.factor(actual)) {
+    stop("actual doit être un facteur, mais est de type: ", class(actual))
+  }
+  
+  # Vérifier que les longueurs correspondent
+  if(length(predicted) != length(actual)) {
+    stop("predicted et actual doivent avoir la même longueur. predicted: ", 
+         length(predicted), ", actual: ", length(actual))
+  }
+  
+  # Vérifier qu'on a des données
+  if(length(actual) == 0) {
+    stop("actual est vide")
+  }
+  
+  cat("\n=== multiclass_metrics debug ===\n")
+  cat("predicted type:", class(predicted), "length:", length(predicted), "\n")
+  cat("actual type:", class(actual), "length:", length(actual), "\n")
+  cat("predicted levels:", paste(levels(predicted), collapse=", "), "\n")
+  cat("actual levels:", paste(levels(actual), collapse=", "), "\n")
   
   classes <- levels(actual)
   n_classes <- length(classes)
@@ -3369,7 +3423,7 @@ multiclass_metrics <- function(predicted, actual, average = "macro") {
 }
 
 # Fonction pour remplacer sensibility (devient recall macro-average)
-sensibility_multiclass <- function(predicted, actual) {
+sensitivity_multiclass <- function(predicted, actual) {
   metrics <- multiclass_metrics(predicted, actual, average = "macro")
   return(round(metrics$recall, 3))
 }
