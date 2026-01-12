@@ -211,10 +211,36 @@ importfunction<-function(importparameters){
       
       learning<-transformdata(toto = learning,transpose=importparameters$transpose,zeroegalNA=importparameters$zeroegalNA)
       
+      
+
+      if(is.factor(learning[,1]) || is.character(learning[,1]) ){
+        learning[,1]<-as.factor(as.character(learning[,1]))
+        print(learning[,1])
+        categories_learning =  cut( as.numeric(learning[, 1]),
+                                    breaks = c(0, 15, 30, 45, 60, 90, Inf),
+                                    labels = c("Stage 5", "Stage 4", "Stage 3b", "Stage 3a", "Stage 2", "Stage 1")
+        )
+        
+        learning[, 1] = categories_learning
+        
+        print(learning[,1])
+        cat("target ok!")
+      }else{
+        categories_learning =  cut( as.numeric(learning[, 1]),
+                                    breaks = c(0, 15, 30, 45, 60, 90, Inf),
+                                    labels = c("Stage 5", "Stage 4", "Stage 3b", "Stage 3a", "Stage 2", "Stage 1")
+        )
+        
+        learning[, 1] = categories_learning
+      }
+      
+      
     #}
     if(importparameters$confirmdatabutton!=0){
       learning<-confirmdata(toto = learning)
-      if(importparameters$invers){learning[,1]<-factor(learning[,1],levels = rev(levels(learning[,1])))}
+      if(importparameters$invers){
+        #learning[,1]<-factor(learning[,1],levels = rev(levels(learning[,1])))
+        }
       
       #learning<-learning[-which(apply(X = learning,MARGIN=1,function(x){sum(is.na(x))})==ncol(learning)),]
       
@@ -226,7 +252,7 @@ importfunction<-function(importparameters){
   }
 
   
-  if(!is.null(importparameters$validationfile)  ){
+  if(!is.null(importparameters$validationfile)){
     
     # if(importparameters$confirmdatabutton==0){
       datapathV<- importparameters$validationfile$datapath
@@ -238,12 +264,42 @@ importfunction<-function(importparameters){
       #            else{tabval<<-out}
       #            validate(need(ncol(tabval)>1 & nrow(tabval)>1,"problem import"))
         validation<-transformdata(toto = validation,transpose=importparameters$transpose,zeroegalNA=importparameters$zeroegalNA)
+        # data.frame(
+        #   egfr  =  validation[, 1],
+        #   categories  = cut( validation[, 1], 
+        #                      breaks = c(0, 15, 30, 45, 60, 90, Inf),
+        #                      labels = c("Stage 5", "Stage 4", "Stage 3b", "Stage 3a", "Stage 2", "Stage 1")
+        #   ) 
+        # )
       
-      
+        if(is.factor(validation[,1]) || is.character(validation[,1]) ){
+          
+          validation[,1]<-as.factor(as.character(validation[,1]))
+          categories_validation =  cut(as.numeric( validation[, 1]),
+                                        breaks = c(0, 15, 30, 45, 60, 90, Inf),
+                                        labels = c("Stage 5", "Stage 4", "Stage 3b", "Stage 3a", "Stage 2", "Stage 1")
+          )
+          validation[, 1] = categories_validation
+          
+          cat("validation label status : \n")
+          print( validation[, 1])
+          cat("target ok!")
+          
+        }else{
+          categories_validation =  cut(as.numeric( validation[, 1]),
+                                        breaks = c(0, 15, 30, 45, 60, 90, Inf),
+                                        labels = c("Stage 5", "Stage 4", "Stage 3b", "Stage 3a", "Stage 2", "Stage 1")
+          )
+          
+          validation[, 1] = categories_validation
+        }
+        
     # }
     if(importparameters$confirmdatabutton!=0){
       validation<-confirmdata(toto = validation)
-      if(importparameters$invers){validation[,1]<-factor(validation[,1],levels = rev(levels(validation[,1])))}
+      if(importparameters$invers){
+        #validation[,1]<-factor(validation[,1],levels = rev(levels(validation[,1])))
+        }
       
       #validation<-validation[-which(apply(X = validation,MARGIN=1,function(x){sum(is.na(x))})==ncol(validation)),]
         
@@ -251,7 +307,10 @@ importfunction<-function(importparameters){
     
   }
 
-  res<-list("learning"=learning,"validation"=validation,previousparameters=previousparameters)#,"lev"=lev)
+  res<-list("learning"=learning,
+            "validation"=validation,
+            previousparameters=
+              previousparameters)#,"lev"=lev)
   return(res)
 }
 
@@ -576,6 +635,8 @@ testfunction<-function(tabtransform,testparameters){
                                                alpha = testparameters$alpha,
                                                nlambda = 100)
     datatest<-multivariateresults$results
+    cat(" checking datatest strurcture...\n")
+    print(str(datatest))
 
     if(nrow(datatest)==0){
       print("no variables selected by multivariate method")
@@ -583,15 +644,76 @@ testfunction<-function(tabtransform,testparameters){
       useddata<-NULL
     }
     else{
-      selected_vars<-multivariateresults$selected_vars
-      indvar<-(colnames(tabtransform)%in%selected_vars)
-      indvar[1]<-T #keep the categorial variable
-      tabdiff<<-tabtransform[,indvar]
-      useddata<-data.frame("names"=datatest$name,
-                           "coefficient"=datatest$coefficient,
-                          "logFC"=datatest$logFoldChange,
-                          "mean1"=datatest$mean_group1,
-                          "mean2"=datatest$mean_group2)
+      
+      multivariateresults <- multivariateselection(
+        toto = tabtransform,
+        method = testparameters$test,
+        lambda = testparameters$lambda,
+        alpha = testparameters$alpha,
+        nlambda = 100
+      )
+      
+      datatest <- multivariateresults$results
+      cat("Checking datatest structure...\n")
+      print(str(datatest))
+      
+      if(nrow(datatest) == 0){
+        print("No variables selected by multivariate method")
+        tabdiff <<- data.frame()
+        useddata <- NULL
+      } else {
+        selected_vars <- multivariateresults$selected_vars
+        indvar <- (colnames(tabtransform) %in% selected_vars)
+        indvar[1] <- TRUE  # keep the categorical variable
+        tabdiff <<- tabtransform[, indvar]
+        
+        # Déterminer le nombre de classes
+        n_classes <- length(levels(tabtransform[,1]))
+        
+        # Extraire les colonnes de moyennes
+        mean_cols <- grep("^mean_", colnames(datatest), value = TRUE)
+        
+        # Calculer logFC/effect_size
+        if(n_classes == 2){
+          # Cas binaire : logFC traditionnel
+          means_matrix <- as.matrix(datatest[, mean_cols])
+          logFC <- log2((means_matrix[,1] + 0.0001) / (means_matrix[,2] + 0.0001))
+          
+          # Créer useddata avec mean1 et mean2
+          useddata <- data.frame(
+            "names" = datatest$name,
+            "coefficient" = datatest$coefficient_max,
+            "logFC" = logFC,
+            "mean1" = datatest[, mean_cols[1]],
+            "mean2" = datatest[, mean_cols[2]]
+          )
+        } else {
+          # Cas multi-classe : effect_size
+          means_matrix <- as.matrix(datatest[, mean_cols])
+          
+          # Effect size = étendue (range) des moyennes
+          effect_size <- apply(means_matrix, 1, function(x) max(x) - min(x))
+          
+          # Moyenne globale
+          mean_overall <- rowMeans(means_matrix)
+          
+          # LogFC normalisé pour compatibilité
+          logFC <- log2(1 + effect_size / mean_overall)
+          
+          # Créer useddata avec toutes les colonnes de moyennes
+          useddata <- data.frame(
+            "names" = datatest$name,
+            "coefficient" = datatest$coefficient_max,
+            "logFC" = logFC,
+            "mean_overall" = mean_overall
+          )
+          
+          # Ajouter toutes les moyennes par classe
+          for(col in mean_cols){
+            useddata[, col] <- datatest[, col]
+          }
+        }
+      }
     }
   }else if (testparameters$test=="clustEnet"){
     # Clustering + Elastic Net selection method
@@ -632,28 +754,64 @@ testfunction<-function(tabtransform,testparameters){
     }
   }
   else{
-    # Univariate tests (Wtest, Ttest)
-    multivariateresults<-NULL
-    datatest<-diffexptest(toto = tabtransform,test = testparameters$test )
-    #differential expressed
-    logFC<-datatest[,5]
-    if(testparameters$adjustpval){pval<-datatest[,3]}
-    if(!testparameters$adjustpval){pval<-datatest[,2]}
-    datatestdiff<-datatest[which( (pval<testparameters$thresholdpv)&abs(logFC)>testparameters$thresholdFC ),]
-    if(dim(datatestdiff)[1]==0){
+    # Univariate tests (Kruskal, ANOVA)
+    multivariateresults <- NULL
+    # cat("dimension of tabtransform in testfunction : ", dim(tabtransform), "\n")
+    # print(dim(tabtransform))
+    
+    datatest <- diffexptest(toto = tabtransform, test = testparameters$test)
+    
+    # Get number of classes
+    n_classes <- length(levels(tabtransform[,1]))
+    
+    # Extract logFC (will be either traditional logFC for 2 classes or effect_size for multi-class)
+    logFC <- datatest$logFC
+    
+    # Extract p-values
+    if(testparameters$adjustpval){
+      pval <- datatest[,3]  # adjusted pval
+    } else {
+      pval <- datatest[,2]  # raw pval
+    }
+    
+    # Filter differentially expressed variables
+    datatestdiff <- datatest[which((pval < testparameters$thresholdpv) & 
+                                     abs(logFC) > testparameters$thresholdFC), ]
+    
+    if(dim(datatestdiff)[1] == 0){
       print("no differentially expressed variables")
-      tabdiff<<-data.frame()
+      tabdiff <<- data.frame()
+    } else {
+      indvar <- (colnames(tabtransform) %in% datatestdiff$name)
+      indvar[1] <- TRUE  # keep the categorical variable
+      tabdiff <<- tabtransform[, indvar]
     }
-    else{
-      indvar<-(colnames(tabtransform)%in%datatestdiff$name)
-      indvar[1]<-T #keep the categorial variable
-      tabdiff<<-tabtransform[,indvar]
+    
+    # Create useddata with appropriate columns based on number of classes
+    if(n_classes == 2){
+      # Binary case: use traditional mean1 and mean2
+      mean_cols <- grep("^mean_", colnames(datatest), value = TRUE)
+      useddata <- data.frame(
+        "names" = datatest$name,
+        "pval" = pval,
+        "logFC" = datatest$logFC,
+        "mean1" = datatest[, mean_cols[1]],
+        "mean2" = datatest[, mean_cols[2]]
+      )
+    } else {
+      # Multi-class case: include all means and effect_size
+      mean_cols <- grep("^mean_", colnames(datatest), value = TRUE)
+      useddata <- data.frame(
+        "names" = datatest$name,
+        "pval" = pval,
+        "logFC" = datatest$logFC,  # This is actually effect_size for multi-class
+        "mean_overall" = datatest$mean_overall
+      )
+      # Add all class means
+      for(col in mean_cols){
+        useddata[, col] <- datatest[, col]
+      }
     }
-    useddata<-data.frame("names"=datatest[,1],
-                         "pval"=pval,
-                         "logFC"=datatest[,5],
-                         "mean1"=datatest[,9],
-                         "mean2"=datatest[,10])
   }
   return(list("tabdiff"=tabdiff,
               "datatest"=datatest,
@@ -664,13 +822,106 @@ testfunction<-function(tabtransform,testparameters){
 }
   
 
+# diffexptest <- function(toto, test="Kruskal"){
+#   # Test statistical pour multi-classe (fonctionne aussi pour 2 classes)
+#   # test = "Kruskal" : Kruskal-Wallis (non-paramétrique)
+#   # test = "ANOVA" : ANOVA (paramétrique)
+#   
+#   
+#   cat("debug of difftest at start : \n")
+#   cat("dimension of toto : \n")
+#   print( dim(toto))
+#   group <- toto[,1]
+#   cat("affichage des level de groupe : ")
+#   toto <- toto[,-1]
+#   n_classes <- length(levels(group))
+#   
+#   pval <- vector()
+#   adjustpval <- vector()
+#   
+#   # Calculate mean for each class
+#   means_by_class <- matrix(nrow = ncol(toto), ncol = n_classes)
+#   colnames_means <- paste("mean", levels(group), sep = "_")
+#   
+#   # Calculate overall mean
+#   mean_overall <- vector()
+#   
+#   # Multi-class AUC
+#   auc_multiclass <- vector()
+#   
+#   for (i in 1:max(1,ncol(toto))){
+#     # Statistical test
+#     if(test == "Kruskal"){
+#       # Kruskal-Wallis test (non-parametric)
+#       pval[i] <- tryCatch({
+#         kruskal.test(toto[,i] ~ group)$p.value
+#       }, error = function(e) return(1))
+#     } else if(test == "ANOVA"){
+#       # ANOVA (parametric)
+#       pval[i] <- tryCatch({
+#         summary(aov(toto[,i] ~ group))[[1]][1,"Pr(>F)"]
+#       }, error = function(e) return(1))
+#     }
+#     
+#     # Calculate means for each class
+#     for(j in 1:n_classes){
+#       class_data <- toto[which(group == levels(group)[j]), i]
+#       means_by_class[i, j] <- mean(class_data, na.rm = TRUE) + 0.0001
+#     }
+#     
+#     # Overall mean
+#     mean_overall[i] <- mean(toto[,i], na.rm = TRUE) + 0.0001
+#     
+#     # Multi-class AUC (one-vs-rest average)
+#     auc_multiclass[i] <- tryCatch({
+#       roc_obj <- multiclass.roc(group, toto[,i], quiet=TRUE)
+#       as.numeric(auc(roc_obj))
+#     }, error = function(e) return(0.5))
+#   }
+#   
+#   pval[which(is.na(pval))] <- 1
+#   adjustpval <- p.adjust(pval, method = "BH")
+#   
+#   cat("debug of difftest  : \n")
+#   cat("length  of colnames(toto) : ", length(colnames(toto)), "\n")
+#   cat("length of pval : ", length(pval), "\n")
+#   cat("length of adjustpval : ", length(adjustpval), "\n")
+#   cat("length of auc_multiclass : ", length(auc_multiclass), "\n")
+#   cat("length of mean_overall : ", length(mean_overall), "\n")
+#   
+#   # Build result dataframe
+#   listgen <- data.frame(
+#     name = colnames(toto),
+#     pval = pval,
+#     adjustpval = adjustpval,
+#     auc = auc_multiclass,
+#     mean_overall = mean_overall
+#   )
+#   
+#   # Add means for each class
+#   for(j in 1:n_classes){
+#     listgen[, paste("mean", levels(group)[j], sep = "_")] <- means_by_class[, j]
+#   }
+#   
+#   # Rename columns
+#   colnames(listgen)[2] <- paste("pval", test, sep = "")
+#   colnames(listgen)[3] <- paste("BHadjustpval", test, sep = "")
+#   colnames(listgen)[4] <- "AUC_multiclass"
+#   
+#   return(listgen)
+#}
+
 diffexptest <- function(toto, test="Kruskal"){
   # Test statistical pour multi-classe (fonctionne aussi pour 2 classes)
   # test = "Kruskal" : Kruskal-Wallis (non-paramétrique)
   # test = "ANOVA" : ANOVA (paramétrique)
   
+  cat("debug of difftest at start : \n")
+  cat("dimension of toto : \n")
+  print(dim(toto))
+  
   group <- toto[,1]
-  cat("affichage des level de groupe : ")
+  cat("affichage des level de groupe : ", levels(group), "\n")
   toto <- toto[,-1]
   n_classes <- length(levels(group))
   
@@ -687,7 +938,7 @@ diffexptest <- function(toto, test="Kruskal"){
   # Multi-class AUC
   auc_multiclass <- vector()
   
-  for (i in 1:max(1,ncol(toto))){
+  for (i in 1:max(1, ncol(toto))){
     # Statistical test
     if(test == "Kruskal"){
       # Kruskal-Wallis test (non-parametric)
@@ -720,6 +971,13 @@ diffexptest <- function(toto, test="Kruskal"){
   pval[which(is.na(pval))] <- 1
   adjustpval <- p.adjust(pval, method = "BH")
   
+  cat("debug of difftest  : \n")
+  cat("length of colnames(toto) : ", length(colnames(toto)), "\n")
+  cat("length of pval : ", length(pval), "\n")
+  cat("length of adjustpval : ", length(adjustpval), "\n")
+  cat("length of auc_multiclass : ", length(auc_multiclass), "\n")
+  cat("length of mean_overall : ", length(mean_overall), "\n")
+  
   # Build result dataframe
   listgen <- data.frame(
     name = colnames(toto),
@@ -728,6 +986,23 @@ diffexptest <- function(toto, test="Kruskal"){
     auc = auc_multiclass,
     mean_overall = mean_overall
   )
+  
+  # Calculate logFC for binary comparison or effect size for multi-class
+  if(n_classes == 2){
+    # Binary case: traditional logFC
+    FC <- means_by_class[, 1] / (means_by_class[, 2] + 0.0001)
+    logFC <- log2(abs(FC))
+    listgen$logFC <- logFC
+    listgen$FoldChange <- FC
+  } else {
+    # Multi-class: use range of means as effect size
+    # This represents the spread between highest and lowest group means
+    effect_size <- apply(means_by_class, 1, function(x) max(x) - min(x))
+    listgen$effect_size <- effect_size
+    # For compatibility with downstream code that expects logFC
+    # Use effect_size normalized by overall mean
+    listgen$logFC <- log2(1 + effect_size / mean_overall)
+  }
   
   # Add means for each class
   for(j in 1:n_classes){
@@ -741,6 +1016,7 @@ diffexptest <- function(toto, test="Kruskal"){
   
   return(listgen)
 }
+
 
 compute_multiclass_metrics <- function(predicted, actual) {
   # Calcule les métriques pour la classification multi-classe
@@ -802,107 +1078,300 @@ compute_multiclass_metrics <- function(predicted, actual) {
   ))
 }
 
+
+# Works for 2+ classes using One-vs-Rest approach
+specificity <- function(predict, class){
+  # Ensure both are factors with same levels
+  if(!is.factor(class)) class <- as.factor(class)
+  if(!is.factor(predict)) predict <- as.factor(predict)
+  
+  # Get confusion matrix
+  conf_matrix <- table(Predicted = predict, Actual = class)
+  
+  # Get class levels
+  lev <- levels(class)
+  n_classes <- length(lev)
+  
+  # Calculate specificity per class (One-vs-Rest)
+  # Specificity = TN / (TN + FP)
+  specificity_per_class <- numeric(n_classes)
+  names(specificity_per_class) <- lev
+  
+  for(i in 1:n_classes){
+    class_name <- lev[i]
+    
+    # True Negatives: correctly predicted as NOT this class
+    # Sum of all cells except the row and column of this class
+    TN <- sum(conf_matrix) - sum(conf_matrix[class_name, ]) - sum(conf_matrix[, class_name]) + conf_matrix[class_name, class_name]
+    
+    # False Positives: predicted as this class but actually another
+    FP <- sum(conf_matrix[class_name, ]) - conf_matrix[class_name, class_name]
+    
+    # Specificity for this class
+    if((TN + FP) > 0){
+      specificity_per_class[i] <- TN / (TN + FP)
+    } else {
+      specificity_per_class[i] <- NA
+    }
+  }
+  
+  # Calculate macro-average (mean of per-class specificities)
+  macro_specificity <- mean(specificity_per_class, na.rm = TRUE)
+  
+  # Round results
+  specificity_per_class <- round(specificity_per_class, digits = 3)
+  macro_specificity <- round(macro_specificity, digits = 3)
+  
+  # Return results
+  return(list(
+    per_class = specificity_per_class,
+    macro_average = macro_specificity,
+    n_classes = n_classes
+  ))
+}
+
 ##########################
 # Multivariate variable selection functions
 ##########################
 multivariateselection<-function(toto, method="lasso", lambda=NULL, alpha=0.5, nlambda=100){
-  # Support for multi-class classification
-  group <- factor(toto[,1])
-  n_classes <- length(levels(group))
+  # Function for multivariate variable selection using regularization methods
+  # toto: dataframe with first column as group (factor) and other columns as features
+  # method: "lasso" (alpha=1), "elasticnet" (0<alpha<1), "ridge" (alpha=0)
+  # lambda: regularization parameter (NULL for automatic selection via CV)
+  # alpha: elastic net mixing parameter (0=ridge, 1=lasso)
+  # nlambda: number of lambda values to test
+  
+  lev <- levels(toto[,1])
+  n_classes <- length(lev)
   x <- as.matrix(toto[,-1])
-  y <- group
   
-  # Déterminer la famille selon le nombre de classes
-  family_type <- if(n_classes == 2) "binomial" else "multinomial"
+  # Set alpha based on method
+  if(method == "lasso"){
+    alpha <- 1
+  } else if(method == "ridge" | method == "cox"){
+    alpha <- 0
+  }
   
-  cat(sprintf("Variable selection using %s (n_classes=%d, family=%s)...\n", 
-              method, n_classes, family_type))
+  # Use factor for multinomial (works for 2+ classes)
+  y <- toto[,1]
   
-  if(method %in% c("lasso", "elasticnet", "ridge")){
-    # Alpha values: lasso=1, ridge=0, elasticnet=0.5
-    if(method == "lasso") alpha <- 1
-    if(method == "ridge") alpha <- 0
+  # Perform cross-validation to find optimal lambda if not provided
+  if(is.null(lambda)){
+    set.seed(20011203)
+    cvfit <- cv.glmnet(x, y, family="multinomial",
+                       alpha=alpha, nlambda=nlambda,
+                       type.measure="class", nfolds=min(5, nrow(toto)-1),
+                       type.multinomial = "grouped")
+    lambda <- cvfit$lambda.min
+    lambda_1se <- cvfit$lambda.1se
+  } else {
+    cvfit <- NULL
+    lambda_1se <- lambda
+  }
+  
+  # Fit model with optimal lambda
+  fit <- glmnet(x, y, family="multinomial", alpha=alpha, lambda=lambda,
+                type.multinomial = "grouped")
+  
+  # Extract coefficients (list of matrices, one per class)
+  coef_list <- coef(fit, s=lambda)
+  
+  # Aggregate coefficients across classes (use max absolute value)
+  coef_aggregated <- rep(0, ncol(x))
+  names(coef_aggregated) <- colnames(x)
+  
+  for(class_idx in 1:n_classes){
+    coef_matrix <- as.matrix(coef_list[[class_idx]])
+    coef_values_class <- coef_matrix[-1, 1]  # Remove intercept
+    # Keep maximum absolute coefficient across classes
+    coef_aggregated <- pmax(abs(coef_aggregated), abs(coef_values_class))
+  }
+  
+  # Select non-zero coefficients
+  selected_vars <- names(coef_aggregated[coef_aggregated > 1e-10])
+  
+  # Calculate additional statistics for selected variables
+  if(length(selected_vars) > 0){
+    # Multi-class AUC for each selected variable
+    auc_values <- sapply(selected_vars, function(var){
+      tryCatch({
+        roc_obj <- multiclass.roc(toto[,1], x[, var], quiet=TRUE)
+        as.numeric(auc(roc_obj))
+      }, error = function(e) return(0.5))
+    })
     
-    # Cross-validation pour trouver le meilleur lambda
-    cv_fit <- cv.glmnet(
-      x = x, 
-      y = y, 
-      alpha = alpha, 
-      family = family_type,  # Multinomial pour multi-classe
-      nlambda = nlambda,
-      type.measure = "class",  # Mesure: erreur de classification
-      parallel = FALSE
-    )
+    # Mean values by group for each class
+    means_matrix <- matrix(nrow=length(selected_vars), ncol=n_classes)
+    for(j in 1:n_classes){
+      means_matrix[, j] <- colMeans(x[which(toto[,1] == lev[j]), selected_vars, drop=FALSE], na.rm=TRUE)
+    }
+    colnames(means_matrix) <- paste("mean", lev, sep="_")
     
-    # Extraire le lambda optimal
-    lambda_opt <- if(is.null(lambda)) cv_fit$lambda.min else lambda
+    # ============================================================
+    # CALCUL DU LOGFC / EFFECT SIZE
+    # ============================================================
     
-    # Entraîner le modèle final avec lambda optimal
-    final_model <- glmnet(
-      x = x, 
-      y = y, 
-      alpha = alpha,
-      lambda = lambda_opt,
-      family = family_type
-    )
-    
-    # Extraire les coefficients
-    coef_matrix <- coef(final_model, s = lambda_opt)
-    
-    # Pour multi-classe, coef_matrix est une liste de matrices (une par classe)
-    if(n_classes > 2) {
-      # Combiner les coefficients de toutes les classes
-      # On prend la somme des valeurs absolues pour chaque variable
-      all_coefs <- matrix(0, nrow = nrow(coef_matrix[[1]]), ncol = 1)
-      rownames(all_coefs) <- rownames(coef_matrix[[1]])
-      
-      for(class_idx in 1:n_classes) {
-        all_coefs <- all_coefs + abs(as.matrix(coef_matrix[[class_idx]]))
-      }
-      
-      # Retirer l'intercept et garder les variables non nulles
-      selected_vars_idx <- which(all_coefs[-1, 1] != 0)
-      
+    if(n_classes == 2){
+      # Cas binaire : logFC traditionnel
+      FC <- means_matrix[, 1] / (means_matrix[, 2] + 0.0001)
+      logFC <- log2(abs(FC))
+      FoldChange <- FC
     } else {
-      # Classification binaire
-      coef_values <- as.matrix(coef_matrix)[-1, 1]  # Retirer l'intercept
-      selected_vars_idx <- which(coef_values != 0)
-    }
-    
-    # S'assurer d'avoir au moins min_features variables
-    if(length(selected_vars_idx) < min_features) {
-      cat(sprintf("  Warning: Only %d features selected, minimum is %d\n", 
-                  length(selected_vars_idx), min_features))
-      cat("  Selecting top features by coefficient magnitude...\n")
+      # Cas multi-classe : effect size (étendue des moyennes)
+      effect_size <- apply(means_matrix, 1, function(x) max(x) - min(x))
+      mean_overall <- rowMeans(means_matrix)
       
-      # Sélectionner les top variables par magnitude
-      if(n_classes > 2) {
-        feature_importance <- all_coefs[-1, 1]
-      } else {
-        feature_importance <- abs(coef_values)
-      }
-      selected_vars_idx <- order(feature_importance, decreasing = TRUE)[1:min_features]
+      # LogFC normalisé pour compatibilité
+      logFC <- log2(1 + effect_size / mean_overall)
+      FoldChange <- effect_size
     }
     
-    # Noms des variables sélectionnées
-    selected_vars <- colnames(x)[selected_vars_idx]
+    # ============================================================
+    # CRÉER LE DATAFRAME DE RÉSULTATS
+    # ============================================================
     
-    cat(sprintf("  Selected %d features out of %d (lambda=%.4f)\n", 
-                length(selected_vars), ncol(x), lambda_opt))
+    # Create results dataframe
+    results <- data.frame(
+      name = selected_vars,
+      coefficient_max = coef_aggregated[selected_vars],
+      AUC_multiclass = auc_values,
+      logFoldChange = logFC,
+      FoldChange = FoldChange,
+      stringsAsFactors = FALSE
+    )
     
-    return(list(
-      selected_variables = selected_vars,
-      selected_indices = selected_vars_idx,
-      model = final_model,
-      lambda = lambda_opt,
-      alpha = alpha,
-      cv_model = cv_fit
-    ))
+    # Ajouter mean_overall pour multi-classe
+    if(n_classes > 2){
+      results$mean_overall <- rowMeans(means_matrix)
+    }
+    
+    # Add means for each class
+    for(j in 1:n_classes){
+      results[, colnames(means_matrix)[j]] <- means_matrix[, j]
+    }
+    
+    # Sort by absolute coefficient value
+    results <- results[order(abs(results$coefficient_max), decreasing=TRUE), ]
     
   } else {
-    stop(paste("Unknown method:", method))
+    results <- data.frame()
   }
+  
+  # Return results with model information
+  return(list(
+    results = results,
+    selected_vars = selected_vars,
+    all_coefficients = coef_aggregated,
+    coef_list = coef_list,
+    lambda = lambda,
+    lambda_1se = lambda_1se,
+    alpha = alpha,
+    cvfit = cvfit,
+    fit = fit,
+    method = method,
+    n_classes = n_classes
+  ))
 }
+
+# multivariateselection<-function(toto, method="lasso", lambda=NULL, alpha=0.5, nlambda=100){
+#   # Support for multi-class classification
+#   group <- factor(toto[,1])
+#   n_classes <- length(levels(group))
+#   x <- as.matrix(toto[,-1])
+#   y <- group
+#   min_features = 2
+#   
+#   # Déterminer la famille selon le nombre de classes
+#   family_type <- if(n_classes == 2) "binomial" else "multinomial"
+#   
+#   cat(sprintf("Variable selection using %s (n_classes=%d, family=%s)...\n", 
+#               method, n_classes, family_type))
+#   
+#   if(method %in% c("lasso", "elasticnet", "ridge")){
+#     # Alpha values: lasso=1, ridge=0, elasticnet=0.5
+#     if(method == "lasso") alpha <- 1
+#     if(method == "ridge") alpha <- 0
+#     
+#     # Cross-validation pour trouver le meilleur lambda
+#     cv_fit <- cv.glmnet(
+#       x = x, 
+#       y = y, 
+#       alpha = alpha, 
+#       family = family_type,  # Multinomial pour multi-classe
+#       nlambda = nlambda,
+#       type.measure = "class",  # Mesure: erreur de classification
+#       parallel = FALSE
+#     )
+#     
+#     # Extraire le lambda optimal
+#     lambda_opt <- if(is.null(lambda)) cv_fit$lambda.min else lambda
+#     
+#     # Entraîner le modèle final avec lambda optimal
+#     final_model <- glmnet(
+#       x = x, 
+#       y = y, 
+#       alpha = alpha,
+#       lambda = lambda_opt,
+#       family = family_type
+#     )
+#     
+#     # Extraire les coefficients
+#     coef_matrix <- coef(final_model, s = lambda_opt)
+#     
+#     # Pour multi-classe, coef_matrix est une liste de matrices (une par classe)
+#     if(n_classes > 2) {
+#       # Combiner les coefficients de toutes les classes
+#       # On prend la somme des valeurs absolues pour chaque variable
+#       all_coefs <- matrix(0, nrow = nrow(coef_matrix[[1]]), ncol = 1)
+#       rownames(all_coefs) <- rownames(coef_matrix[[1]])
+#       
+#       for(class_idx in 1:n_classes) {
+#         all_coefs <- all_coefs + abs(as.matrix(coef_matrix[[class_idx]]))
+#       }
+#       
+#       # Retirer l'intercept et garder les variables non nulles
+#       selected_vars_idx <- which(all_coefs[-1, 1] != 0)
+#       
+#     } else {
+#       # Classification binaire
+#       coef_values <- as.matrix(coef_matrix)[-1, 1]  # Retirer l'intercept
+#       selected_vars_idx <- which(coef_values != 0)
+#     }
+#     
+#     # S'assurer d'avoir au moins min_features variables
+#     if(length(selected_vars_idx) < min_features) {
+#       cat(sprintf("  Warning: Only %d features selected, minimum is %d\n", 
+#                   length(selected_vars_idx), min_features))
+#       cat("  Selecting top features by coefficient magnitude...\n")
+#       
+#       # Sélectionner les top variables par magnitude
+#       if(n_classes > 2) {
+#         feature_importance <- all_coefs[-1, 1]
+#       } else {
+#         feature_importance <- abs(coef_values)
+#       }
+#       selected_vars_idx <- order(feature_importance, decreasing = TRUE)[1:min_features]
+#     }
+#     
+#     # Noms des variables sélectionnées
+#     selected_vars <- colnames(x)[selected_vars_idx]
+#     
+#     cat(sprintf("  Selected %d features out of %d (lambda=%.4f)\n", 
+#                 length(selected_vars), ncol(x), lambda_opt))
+#     
+#     return(list(
+#       selected_variables = selected_vars,
+#       selected_indices = selected_vars_idx,
+#       model = final_model,
+#       lambda = lambda_opt,
+#       alpha = alpha,
+#       cv_model = cv_fit
+#     ))
+#     
+#   } else {
+#     stop(paste("Unknown method:", method))
+#   }
+# }
 
 ##########################
 # Clustering + Elastic Net selection function
@@ -1089,7 +1558,7 @@ clustEnetSelection <- function(toto, n_clusters = 100, n_bootstrap = 500,
     ))
   }
   
-  # Calculate statistics for selected variables (similar to multivariateselection)
+  # Calculate statistics for selected variables 
   lev <- levels(toto[,1])
   group <- ifelse(toto[,1] == lev[1], 1, 0)
   x <- as.matrix(toto[,-1])
@@ -1184,26 +1653,195 @@ volcanoplot<-function(logFC,pval,thresholdFC=0,thresholdpv=0.05,graph=T,maintitl
   
   g
 } 
+# 
+# barplottest<-function(feature,logFC,levels,pval,mean1,mean2,thresholdpv=0.05,thresholdFC=1,graph=T,
+#                       maintitle="Mean by group for differentially expressed variables"){
+#   feature<-rep(feature,each=2)
+#   group<-rep(c(levels[1],levels[2]),times=(length(feature)/2))
+#   group<-factor(group,levels =c(levels[1],levels[2]))
+#   pval2<-rep((pval< thresholdpv),each=2)
+#   logFC2<-rep((abs(logFC)> thresholdFC),each=2) 
+#   mean<-vector() 
+#   mean[seq(from=1,to=length(feature),by = 2)]<-mean1
+#   mean[seq(from=2,to=length(feature),by = 2)]<-mean2
+#   data<-data.frame(feature,group,pval,logFC,mean,logFC2,pval2)
+#   data<-data[order(data$pval),]
+#   if(!graph){
+#     data<-data[order(data[,1]),]
+#     return(data[which((data$pval2==TRUE)& (data$logFC2==TRUE)),c(1,2,5)])}
+#   else{
+#     ggplot(data[which( ( data$pval2) & (data$logFC2) ),], aes(feature, mean,fill=group))+geom_bar(stat="identity", position="dodge")+ 
+#       ggtitle(maintitle)+theme(plot.title=element_text( size=15))
+#   }
+# }
 
-barplottest<-function(feature,logFC,levels,pval,mean1,mean2,thresholdpv=0.05,thresholdFC=1,graph=T,maintitle="Mean by group for differentially expressed variables"){
-  feature<-rep(feature,each=2)
-  group<-rep(c(levels[1],levels[2]),times=(length(feature)/2))
-  group<-factor(group,levels =c(levels[1],levels[2]))
-  pval2<-rep((pval< thresholdpv),each=2)
-  logFC2<-rep((abs(logFC)> thresholdFC),each=2) 
-  mean<-vector() 
-  mean[seq(from=1,to=length(feature),by = 2)]<-mean1
-  mean[seq(from=2,to=length(feature),by = 2)]<-mean2
-  data<-data.frame(feature,group,pval,logFC,mean,logFC2,pval2)
-  data<-data[order(data$pval),]
-  if(!graph){
-    data<-data[order(data[,1]),]
-    return(data[which((data$pval2==TRUE)& (data$logFC2==TRUE)),c(1,2,5)])}
-  else{
-    ggplot(data[which( ( data$pval2) & (data$logFC2) ),], aes(feature, mean,fill=group))+geom_bar(stat="identity", position="dodge")+ 
-      ggtitle(maintitle)+theme(plot.title=element_text( size=15))
+
+barplottest <- function(feature, logFC, levels, pval, means, 
+                        thresholdpv = 0.05, thresholdFC = 1, 
+                        graph = TRUE, 
+                        maintitle = "Mean by group for differentially expressed variables",
+                        max_features = 20,
+                        order_by = "pval") {
+  # feature: vecteur des noms de variables
+  # logFC: vecteur des log fold changes ou effect sizes
+  # levels: vecteur des noms des groupes/classes
+  # pval: vecteur des p-values
+  # means: matrice ou dataframe avec les moyennes (lignes = variables, colonnes = classes)
+  # thresholdpv: seuil de p-value
+  # thresholdFC: seuil de logFC/effect size
+  # graph: TRUE pour retourner le graphique, FALSE pour retourner les données
+  # maintitle: titre du graphique
+  # max_features: nombre maximum de features à afficher
+  # order_by: "pval" ou "effect_size" pour l'ordre des features
+  
+  # Vérifications
+  if(length(feature) == 0){
+    if(graph){
+      return(ggplot() + 
+               annotate("text", x = 0.5, y = 0.5, 
+                        label = "No differentially expressed variables", 
+                        size = 6) +
+               theme_void())
+    } else {
+      return(data.frame())
+    }
   }
+  
+  # Convertir means en matrice si ce n'est pas le cas
+  if(is.data.frame(means)){
+    means <- as.matrix(means)
+  }
+  
+  # S'assurer que means a le bon nombre de colonnes
+  if(ncol(means) != length(levels)){
+    stop("Number of columns in 'means' must match length of 'levels'")
+  }
+  
+  # Filtrer les variables significatives
+  sig_idx <- which((pval < thresholdpv) & (abs(logFC) > thresholdFC))
+  
+  if(length(sig_idx) == 0){
+    if(graph){
+      return(ggplot() + 
+               annotate("text", x = 0.5, y = 0.5, 
+                        label = "No differentially expressed variables\nwith current thresholds", 
+                        size = 6) +
+               theme_void())
+    } else {
+      return(data.frame())
+    }
+  }
+  
+  # Sélectionner les variables significatives
+  feature_sig <- feature[sig_idx]
+  logFC_sig <- logFC[sig_idx]
+  pval_sig <- pval[sig_idx]
+  means_sig <- means[sig_idx, , drop = FALSE]
+  
+  # Trier selon order_by
+  if(order_by == "pval"){
+    order_idx <- order(pval_sig)
+  } else if(order_by == "effect_size"){
+    order_idx <- order(abs(logFC_sig), decreasing = TRUE)
+  } else {
+    order_idx <- 1:length(feature_sig)
+  }
+  
+  feature_sig <- feature_sig[order_idx]
+  logFC_sig <- logFC_sig[order_idx]
+  pval_sig <- pval_sig[order_idx]
+  means_sig <- means_sig[order_idx, , drop = FALSE]
+  
+  # Limiter le nombre de features affichées
+  if(length(feature_sig) > max_features){
+    feature_sig <- feature_sig[1:max_features]
+    logFC_sig <- logFC_sig[1:max_features]
+    pval_sig <- pval_sig[1:max_features]
+    means_sig <- means_sig[1:max_features, , drop = FALSE]
+    warning(paste("Only showing top", max_features, "features. Adjust max_features to show more."))
+  }
+  
+  # Créer le dataframe long format pour ggplot
+  n_features <- length(feature_sig)
+  n_groups <- length(levels)
+  
+  # Répéter les features pour chaque groupe
+  feature_rep <- rep(feature_sig, each = n_groups)
+  
+  # Répéter les groupes pour chaque feature
+  group_rep <- rep(levels, times = n_features)
+  group_rep <- factor(group_rep, levels = levels)
+  
+  # Répéter pval et logFC pour chaque groupe
+  pval_rep <- rep(pval_sig, each = n_groups)
+  logFC_rep <- rep(logFC_sig, each = n_groups)
+  
+  # Extraire les moyennes en format long
+  mean_values <- as.vector(t(means_sig))
+  
+  # Créer le dataframe
+  data_plot <- data.frame(
+    feature = feature_rep,
+    group = group_rep,
+    pval = pval_rep,
+    logFC = logFC_rep,
+    mean = mean_values,
+    stringsAsFactors = FALSE
+  )
+  
+  # Ordonner les features par leur ordre d'apparition
+  data_plot$feature <- factor(data_plot$feature, levels = unique(feature_sig))
+  
+  if(!graph){
+    # Retourner les données au format large pour export
+    result <- data.frame(
+      feature = feature_sig,
+      pval = pval_sig,
+      logFC = logFC_sig
+    )
+    for(i in 1:n_groups){
+      result[, paste0("mean_", levels[i])] <- means_sig[, i]
+    }
+    return(result)
+  }
+  
+  # Créer le graphique
+  p <- ggplot(data_plot, aes(x = feature, y = mean, fill = group)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    labs(
+      title = maintitle,
+      x = "Variables",
+      y = "Mean intensity",
+      fill = "Group"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 15, face = "bold", hjust = 0.5),
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+      axis.text.y = element_text(size = 10),
+      axis.title = element_text(size = 12, face = "bold"),
+      legend.title = element_text(size = 11, face = "bold"),
+      legend.text = element_text(size = 10),
+      legend.position = "right",
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor = element_blank()
+    )
+  
+  # Ajouter une palette de couleurs adaptée au nombre de classes
+  if(n_groups <= 3){
+    p <- p + scale_fill_brewer(palette = "Set1")
+  } else if(n_groups <= 8){
+    p <- p + scale_fill_brewer(palette = "Set2")
+  } else {
+    # Pour plus de 8 groupes, utiliser une palette continue
+    p <- p + scale_fill_viridis_d(option = "turbo")
+  }
+  
+  return(p)
 }
+
+
+
 errorplot<-function(text=paste("error /n","text error")){
   plot(c(0, 1), c(0, 1), ann = F, bty = 'n', type = 'n', xaxt = 'n', yaxt = 'n')
   text(x = 0.5, y = 0.5, text,cex = 1.6, col = "black")}
@@ -1728,10 +2366,10 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       } else {
         # Classification multi-classe
         scorelearning <- model$votes  # Matrice n_samples x n_classes
-        cat("scorelearning dimensions: nombre de lignes : ", dim(scorelearning)[1]," et ncol : ", dim(scorelearning)[2],"\n")
+        #cat("scorelearning dimensions: nombre de lignes : ", dim(scorelearning)[1]," et ncol : ", dim(scorelearning)[2],"\n")
         colnames(scorelearning) <- paste("Prob", lev, sep="_")
-        cat("scorelearning dans le train  : \n")
-        print(head(scorelearning))
+        # cat("scorelearning dans le train  : \n")
+        # print(head(scorelearning))
         # Prédiction = classe avec la probabilité maximale
         predictclasslearning <- randomForest:::predict.randomForest(model, learningmodel)
         predictclasslearning <- as.factor(predictclasslearning)
@@ -2918,9 +3556,9 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
   validation <- factor(validation, levels = rev(levels(validation)), ordered = TRUE)
   n_classes <- length(levels(validation))
   
-  cat("affcihege de la n_classes:", n_classes, "\n")
-  cat("affichage de la tete des proba dans roccurve : \n")
-  print(head(decisionvalues))
+  # cat("affcihege de la n_classes:", n_classes, "\n")
+  # cat("affichage de la tete des proba dans roccurve : \n")
+  # print(head(decisionvalues))
   # Pour la classification binaire, garder le comportement original
   if(n_classes == 2 && !is.matrix(decisionvalues)) {
     res <- roc(validation, decisionvalues, quiet = TRUE)
@@ -3029,8 +3667,6 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
       mean_auc = mean_auc
     ))
   }
-  
-  
      
     
   if(ggplot){
@@ -3428,7 +4064,7 @@ sensitivity_multiclass <- function(predicted, actual) {
   return(round(metrics$recall, 3))
 }
 
-# Fonction pour remplacer specificity (devient moyenne des spécificités par classe)
+
 specificity_multiclass <- function(predicted, actual) {
   classes <- levels(actual)
   n_classes <- length(classes)

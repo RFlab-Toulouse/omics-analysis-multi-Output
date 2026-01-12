@@ -456,7 +456,7 @@ shinyServer(function(input, output,session) {
       # ==========================================================================
       
       # AUC Learning
-      scores_learn <- MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning
+      scores_learn <- MODEL()$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel) - 1)]
       if(is.matrix(scores_learn)) {
         auc_results_learn <- compute_multiclass_auc(
           MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,
@@ -488,7 +488,7 @@ shinyServer(function(input, output,session) {
       # Validation
       if(input$adjustval){
         # AUC Validation
-        scores_val <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval
+        scores_val <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel) - 1)]
         if(is.matrix(scores_val)) {
           auc_results_val <- compute_multiclass_auc(
             MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,
@@ -540,10 +540,10 @@ shinyServer(function(input, output,session) {
     di1<-dim(x = DATA()$VALIDATION)[1]  
   })
   output$dim2val<-renderText({
-    di2<-dim(x = DATA()$VALIDATION)[2]  
+    di2<-dim(x = DATA()$VALIDATION)[2]- 1
   })  
 
-  #si erreur envoyÃÂÃÂ© pb import
+  #si erreur envoyé pb import
   DATA<-reactive({
      # Require that either a learning file or a model file is uploaded before proceeding
      
@@ -841,11 +841,45 @@ output$downloaddatastatistics<- downloadHandler(
   }
 )
 output$positif<-renderText({
-  res<-levels(DATA()$LEARNING[,1])[1]
+  res<-levels(DATA()$LEARNING[,1]) #[1]
+  paste(res, collapse = ", ")
 })
 output$negatif<-renderText({
   res<-levels(DATA()$LEARNING[,1])[2]
 })
+
+# Display class summary
+# output$class_summary <- renderText({
+#   #req(DATA()$LEARNING)
+#   #req(input$confirmdatabutton != 0)
+#   req(DATA())
+#   learning <- DATA()$LEARNING
+#   cat("dim of learning data : \n")
+#   print(dim(learning))
+#   #validate(need(!is.null(learning), "No data loaded"))
+#   class_levels <- levels(learning[,1])
+#   paste(class_levels, collapse = ", ")
+# })
+# 
+# # Display class count indicator
+# output$class_count_indicator <- renderUI({
+#   learning <- DATA()$LEARNING
+#   cat(" data of training in renderIU values count : \n")
+#   print(dim(DATA()$LEARNING))
+#   #validate(need(!is.null(learning), "No data loaded"))
+#   n_classes <- length(levels(learning[,1]))
+#   
+#   # Create badge with appropriate color
+#   badge_color <-  "#28a745"
+#   
+#   tags$div(
+#     id = "class_count_indicator",
+#     style = sprintf("color: white; background-color: %s; padding: 10px; border-radius: 5px; text-align: center; font-weight: bold;", badge_color),
+#     sprintf("📊 %d classe%s détectée%s (multi-classe)", n_classes, if(n_classes > 1) "s" else "", if(n_classes > 1) "s" else "")
+#   )
+# })
+
+
 output$volcanoplot <- renderPlot({
   datatest<<-TEST()$DATATEST
   useddata<<-TEST()$USEDDATA
@@ -874,8 +908,33 @@ output$nbdiff<-renderText({
 output$barplottest <- renderPlot({
   learningdiff<<-TEST()$LEARNINGDIFF
   useddata<<-TEST()$USEDDATA
-  if(nrow(learningdiff)!=0){barplottest(feature=useddata$names,logFC=useddata$logFC,levels=levels(learningdiff[,1]),pval=useddata$pval,mean1=useddata$mean1,mean2=useddata$mean2,thresholdpv=input$thresholdpv,
-                                             thresholdFC=input$thresholdFC,graph=T,maintitle="Mean by group for differentially expressed variables")
+  if(nrow(learningdiff)!=0){
+    # barplottest(feature=useddata$names,
+    #             logFC=useddata$logFC,
+    #             levels=levels(learningdiff[,1]),
+    #             pval=useddata$pval,mean1=useddata$mean1,
+    #             mean2=useddata$mean2,
+    #             thresholdpv=input$thresholdpv,  
+    #             thresholdFC=input$thresholdFC,graph=T,maintitle="Mean by group for differentially expressed variables")
+    
+    # cat("structure de TEST()$USEDDATA \n")
+    # str(TEST()$USEDDATA)
+    matrix_means =  as.matrix(TEST()$USEDDATA[, grep("^mean_", colnames(TEST()$USEDDATA))])
+    # delete mean_overall if exists
+    if("mean_overall" %in% colnames(TEST()$USEDDATA)){
+      matrix_means = matrix_means[, colnames(matrix_means) != "mean_overall", drop = FALSE]
+    }
+    
+    # cat("ncol of matrix_means : ", ncol(matrix_means), "\n")
+    # cat("n levels of matrix_means : ", length(levels(TEST()$LEARNINGDIFF[,1])), "\n")
+    
+    barplottest(feature = TEST()$USEDDATA$name,
+                logFC = TEST()$USEDDATA$logFC,  # effect_size pour multi-classe
+                levels = levels(TEST()$LEARNINGDIFF[,1]),
+                pval = TEST()$USEDDATA$pval,
+                means = matrix_means,
+                thresholdpv = input$thresholdpv,
+                thresholdFC = input$thresholdFC)
 }
   else{errorplot(text = " No differently expressed ")}
   
@@ -883,14 +942,39 @@ output$barplottest <- renderPlot({
 output$downloadbarplottest = downloadHandler(
   filename = function() {paste('graph','.',input$paramdownplot, sep='')},
   content = function(file) {
-    ggsave(file, plot = barplottest(feature=TEST()$USEDDATA$names,logFC=TEST()$USEDDATA$logFC,levels=levels(TEST()$LEARNINGDIFF[,1]),pval=TEST()$USEDDATA$pval,mean1=TEST()$USEDDATA$mean1,mean2=TEST()$USEDDATA$mean2,thresholdpv=input$thresholdpv,
-                                    thresholdFC=input$thresholdFC,graph=T,maintitle="Mean by group for differentially expressed variables"),  device = input$paramdownplot)},
+    matrix_means =  as.matrix(TEST()$USEDDATA[, grep("^mean_group", colnames(TEST()$USEDDATA))])
+    # delete mean_overall if exists
+    if("mean_overall" %in% colnames(TEST()$USEDDATA)){
+      matrix_means = matrix_means[, colnames(matrix_means) != "mean_overall", drop = FALSE]
+    }
+    
+    ggsave(file, plot =
+             # Utiliser la nouvelle fonction barplottest
+             barplottest(feature = TEST()$USEDDATA$name,
+                         logFC = TEST()$USEDDATA$logFC,  # effect_size pour multi-classe
+                         levels = levels(TEST()$LEARNINGDIFF[,1]),
+                         pval = TEST()$USEDDATA$pval,
+                         means = matrix_means,
+                         thresholdpv = input$thresholdpv,
+                         thresholdFC = input$thresholdFC),
+             
+             # barplottest(feature=TEST()$USEDDATA$names,
+             #                        logFC=TEST()$USEDDATA$logFC,
+             #                        levels=levels(TEST()$LEARNINGDIFF[,1]),
+             #                        pval=TEST()$USEDDATA$pval,
+             #                        mean1=TEST()$USEDDATA$mean1
+             #                        ,mean2=TEST()$USEDDATA$mean2,
+             #                        thresholdpv=input$thresholdpv,
+             #                        thresholdFC=input$thresholdFC,
+             #                        graph=T,
+             #                        maintitle="Mean by group for differentially expressed variables"),  
+           device = input$paramdownplot)},
   contentType=NA)
-output$downloaddatabarplottest <- downloadHandler(
-  filename = function() { paste('dataset', '.',input$paramdowntable, sep='') },
-  content = function(file) {
-    downloaddataset(barplottest(feature=TEST()$USEDDATA$names,logFC=TEST()$USEDDATA$logFC,levels=levels(TEST()$LEARNINGDIFF[,1]),pval=TEST()$USEDDATA$pval,mean1=TEST()$USEDDATA$mean1,mean2=TEST()$USEDDATA$mean2,thresholdpv=input$thresholdpv,
-                                thresholdFC=input$thresholdFC,maintitle="Mean by group for differentially expressed variables",graph=F), file) })
+# output$downloaddatabarplottest <- downloadHandler(
+#   filename = function() { paste('dataset', '.',input$paramdowntable, sep='') },
+#   content = function(file) {
+#     downloaddataset(barplottest(feature=TEST()$USEDDATA$names,logFC=TEST()$USEDDATA$logFC,levels=levels(TEST()$LEARNINGDIFF[,1]),pval=TEST()$USEDDATA$pval,mean1=TEST()$USEDDATA$mean1,mean2=TEST()$USEDDATA$mean2,thresholdpv=input$thresholdpv,
+#                                 thresholdFC=input$thresholdFC,maintitle="Mean by group for differentially expressed variables",graph=F), file) })
 
 # output$dataconditiontest=renderDataTable({
 #   hypothesistest<-TEST()$hypothesistest},options = list("orderClasses" = F,
@@ -1254,8 +1338,8 @@ MODEL<-reactive({
                            datastructuresfeatures =  datastructuresfeatures,
                            learningselect = learningselect)
   
-  cat("on est dans le server model \n")
-  print(str(resmodel$datalearningmodel))
+  # cat("on est dans le server model \n")
+  # print(str(resmodel$datalearningmodel))
   
  list("DATALEARNINGMODEL"=resmodel$datalearningmodel,"MODEL"=resmodel$model,
       "DATAVALIDATIONMODEL"=resmodel$datavalidationmodel,
@@ -1467,7 +1551,7 @@ output$downloaddatadecouvroc <- downloadHandler(
   content = function(file) {
     roc_data <- ROCcurve(
       validation = MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,
-      decisionvalues = MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning,
+      decisionvalues = MODEL()$DATALEARNINGMODEL$reslearningmodel[,2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel)-1)],
       graph = FALSE
     )
     downloaddataset(roc_data, file)
@@ -1572,13 +1656,16 @@ output$specificitydecouv <- renderText({
 output$detailed_metrics_decouv <- renderTable({
   req(MODEL())
   
-  tryCatch({
+  # tryCatch({
     model_result <- MODEL()
     if(!is.null(model_result$DATALEARNINGMODEL)) {
       predicted <- model_result$DATALEARNINGMODEL$reslearningmodel$predictclasslearning
       actual <- model_result$DATALEARNINGMODEL$reslearningmodel$classlearning
-      scores <- model_result$DATALEARNINGMODEL$reslearningmodel$scorelearning
+      scores <- model_result$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(model_result$DATALEARNINGMODEL$reslearningmodel)-1)]
       
+      scores =  as.matrix(scores)
+      cat("structiure of mscores in detaillled metrics decouverte : \n")
+      print(str(scores))
       # Calculer les métriques
       metrics <- compute_multiclass_metrics(predicted, actual)
       classes <- levels(actual)
@@ -1597,27 +1684,39 @@ output$detailed_metrics_decouv <- renderTable({
         }
       }
       
+      cat("AUC per class: \n")
+      print(auc_per_class)
+      
+      
+      # res_aucs_values = ROCcurve (validation = actual, 
+      #                             decisionvalues = scores,
+      #                             , maintitle="ROC Curves (One-vs-All)",
+      #                             graph=F, ggplot=F)
+      res_metrics = print_multiclass_performance(predicted, actual, score_matrix = scores, set_name = "Training")
+      cat("specificity(predicted, actual)$specificity_per_class: \n")
+      print(specificity(predicted, actual)$per_class )
       # Créer le tableau
       result_df <- data.frame(
         Class = classes,
-        Precision = round(metrics$precision_per_class, 3),
+        # Precision = round(metrics$precision_per_class, 3),
         sensitivity = round(metrics$recall_per_class, 3),
-        F1_Score = round(metrics$f1_per_class, 3),
+        specificity =  specificity(predicted, actual)$per_class ,
+        # F1_Score = round(metrics$f1_per_class, 3),
         AUC = round(auc_per_class, 3),
         stringsAsFactors = FALSE
       )
       
       return(result_df)
     }
-  }, error = function(e) {
-    data.frame(
-      Class = "Error",
-      Precision = e$message,
-      sensitivity = "",
-      F1_Score = "",
-      AUC = ""
-    )
-  })
+  # }, error = function(e) {
+  #   data.frame(
+  #     Class = "Error",
+  #     Precision = e$message,
+  #     sensitivity = "",
+  #     F1_Score = "",
+  #     AUC = ""
+  #   )
+  # })
 }, striped = TRUE, hover = TRUE, bordered = TRUE)
 
 # Learning - Métriques moyennes
@@ -1630,8 +1729,9 @@ output$average_metrics_decouv <- renderTable({
     if(!is.null(model_result$DATALEARNINGMODEL)) {
       predicted <- model_result$DATALEARNINGMODEL$reslearningmodel$predictclasslearning
       actual <- model_result$DATALEARNINGMODEL$reslearningmodel$classlearning
-      scores <- model_result$DATALEARNINGMODEL$reslearningmodel$scorelearning
+      scores <- model_result$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(model_result$DATALEARNINGMODEL$reslearningmodel)-1)]
       
+      scores =  as.matrix(scores)
       # Calculer les métriques de base
       metrics <- compute_multiclass_metrics(predicted, actual)
       
@@ -1667,16 +1767,16 @@ output$average_metrics_decouv <- renderTable({
           "Accuracy",
           "Sensitivity (macro)",
           "Specificity (macro)",
-          "Precision (macro)",
-          "F1-Score (macro)",
+          # "Precision (macro)",
+          # "F1-Score (macro)",
           "AUC (macro)"
         ),
         Value = c(
           metrics$accuracy,
           metrics$sensitivity,
           metrics$specificity,
-          metrics$precision_macro,
-          metrics$f1_score,
+          # metrics$precision_macro,
+          # metrics$f1_score,
           ifelse(is.na(auc_value), "-", round(auc_value, 3))
         ),
         stringsAsFactors = FALSE
@@ -1729,8 +1829,9 @@ output$detailed_metrics_val <- renderTable({
     if(!is.null(model_result$DATAVALIDATIONMODEL)) {
       predicted <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval
       actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
-      scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$scoreval
+      scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel[2:(ncol(model_result$DATAVALIDATIONMODEL$resvalidationmodel)-1)]
       
+      scores =  as.matrix(scores)
       # Calculer les métriques
       metrics <- compute_multiclass_metrics(predicted, actual)
       classes <- levels(actual)
@@ -1752,9 +1853,10 @@ output$detailed_metrics_val <- renderTable({
       # Créer le tableau
       result_df <- data.frame(
         Class = classes,
-        Precision = round(metrics$precision_per_class, 3),
+        # Precision = round(metrics$precision_per_class, 3),
         sensitivity = round(metrics$recall_per_class, 3),
-        F1_Score = round(metrics$f1_per_class, 3),
+        specificity =  round(specificity(predicted, actual)$per_class , 3),
+        # F1_Score = round(metrics$f1_per_class, 3),
         AUC = round(auc_per_class, 3),
         stringsAsFactors = FALSE
       )
@@ -1765,8 +1867,9 @@ output$detailed_metrics_val <- renderTable({
     data.frame(
       Class = "Error",
       Precision = e$message,
+      specificity = "",
       sensitivity = "",
-      F1_Score = "",
+      #F1_Score = "",
       AUC = ""
     )
   })
@@ -1782,7 +1885,7 @@ output$average_metrics_val <- renderTable({
     if(!is.null(model_result$DATAVALIDATIONMODEL)) {
       predicted <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval
       actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
-      scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$scoreval
+      scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(model_result$DATAVALIDATIONMODEL$resvalidationmodel)-1)]
       
       # Calculer les métriques de base
       metrics <- compute_multiclass_metrics(predicted, actual)
@@ -1816,16 +1919,16 @@ output$average_metrics_val <- renderTable({
           "Accuracy",
           "Sensitivity (macro)",
           "Specificity (macro)",
-          "Precision (macro)",
-          "F1-Score (macro)",
+          # "Precision (macro)",
+          # "F1-Score (macro)",
           "AUC (macro)"
         ),
         Value = c(
           metrics$accuracy,
           metrics$sensitivity,
           metrics$specificity,
-          metrics$precision_macro,
-          metrics$f1_score,
+          # metrics$precision_macro,
+          # metrics$f1_score,
           ifelse(is.na(auc_value), "-", round(auc_value, 3))
         ),
         stringsAsFactors = FALSE
@@ -2688,7 +2791,7 @@ output$performance_summary <- renderPrint({
     if(!is.null(model_result$datalearningmodel)) {
       predicted <- model_result$datalearningmodel$reslearningmodel$predictclasslearning
       actual <- model_result$datalearningmodel$reslearningmodel$classlearning
-      scores <- model_result$datalearningmodel$reslearningmodel$scorelearning
+      scores <- model_result$datalearningmodel$reslearningmodel[,2:(ncol(model_result$datalearningmodel$reslearningmodel)-1)]
       
       # Extraire la matrice de scores si nécessaire
       score_matrix <- if(is.matrix(scores)) {
@@ -2913,120 +3016,4 @@ output$downloadplottestparametersboth = downloadHandler(
            device = input$paramdownplot)},
   contentType=NA)
 
-# 
-# plotbarstest =  function(dataset_test_params, type){
-#   # library(dplyr)
-#   if(type ==  'learning'){
-#     new_dataset  =  dataset_test_params %>% 
-#       group_by(model, test) %>%
-#       summarise(mean_auc_learning = mean(`auc learning`, na.rm = TRUE),
-#                 mean_sensibility_learning = mean(`sensibility learning`, na.rm = TRUE),
-#                 mean_specificity_learning = mean(`specificity learning`, na.rm = TRUE),
-#                 .groups = 'drop',
-#                 count = n())
-#     
-#     # Convertir le jeu de données en format long
-#     data_long <- pivot_longer(new_dataset, 
-#                               cols = starts_with("mean_"), 
-#                               names_to = "metric", 
-#                               values_to = "value")
-#     
-#     data_long = data_long  %>% mutate(metric = recode(metric,
-#                                                       "mean_auc_learning" = "AUC Learning",
-#                                                       "mean_sensibility_learning" = "Sensitivity Learning",
-#                                                       "mean_specificity_learning" = "Specificity Learning")
-#     )
-#     
-#   } else if(type == 'validation'){
-#     new_dataset  =  dataset_test_params %>% 
-#       group_by(model, test) %>%
-#       summarise(mean_auc_validation = mean(`auc validation`, na.rm = TRUE),
-#                 mean_sensibility_validation = mean(`sensibility validation`, na.rm = TRUE),
-#                 mean_specificity_validation = mean(`specificityvalidation`, na.rm = TRUE),
-#                 .groups = 'drop',
-#                 count = n())
-#     
-#     # Convertir le jeu de données en format long
-#     data_long <- pivot_longer(new_dataset, 
-#                               cols = starts_with("mean_"), 
-#                               names_to = "metric", 
-#                               values_to = "value")
-#     
-#     data_long = data_long  %>% mutate(metric = recode(metric,
-#                                                       "mean_auc_validation" = "AUC Validation",
-#                                                       "mean_sensibility_validation" = "Sensitivity Validation",
-#                                                       "mean_specificity_validation" = "Specificity Validation"
-#                                                       )
-#     )
-#     
-#   }else if (type == 'both'){
-#     new_dataset  =  dataset_test_params %>% 
-#       group_by(model, test) %>%
-#       summarise(mean_auc_validation = mean(`auc validation`, na.rm = TRUE),
-#                 mean_sensibility_validation = mean(`sensibility validation`, na.rm = TRUE),
-#                 mean_specificity_validation = mean(`specificityvalidation`, na.rm = TRUE),
-#                 mean_auc_learning = mean(`auc learning`, na.rm = TRUE),
-#                 mean_sensibility_learning = mean(`sensibility learning`, na.rm = TRUE),
-#                 mean_specificity_learning = mean(`specificity learning`, na.rm = TRUE),
-#                 .groups = 'drop',
-#                 count = n())
-#     
-#     # Convertir le jeu de données en format long
-#     data_long <- pivot_longer(new_dataset, 
-#                               cols = starts_with("mean_"), 
-#                               names_to = "metric", 
-#                               values_to = "value")
-#     
-#     data_long = data_long  %>% mutate(metric = recode(metric,
-#                                                       "mean_auc_validation" = "AUC Validation",
-#                                                       "mean_sensibility_validation" = "Sensitivity Validation",
-#                                                       "mean_specificity_validation" = "Specificity Validation",
-#                                                       "mean_auc_learning" = "AUC Learning",
-#                                                       "mean_sensibility_learning" = "Sensitivity Learning",
-#                                                       "mean_specificity_learning" = "Specificity Learning")
-#     )
-#     
-#   }
-#   
-#   # Créer le graphique à barres
-#   # ggplot(data_long, aes(x = interaction(model, test), y = value, fill = metric)) +
-#   #   geom_bar(stat = "identity", position = "dodge") +
-#   #   labs(x = "Modèle et Test", y = "Valeur", title = "Comparaison des métriques par modèle et test") +
-#   #   theme_minimal() +
-#   #   theme(axis.text.x = element_text(size =  12,face = 'bold'),
-#   #         axis.text.y =  element_text(size =  12,face = 'bold'),
-#   #         plot.title = element_text(size = 14, face = "bold"),
-#   #         axis.title.x = element_text(size = 13, face = "bold"),
-#   #         axis.title.y = element_text(size = 13, face = "bold")
-#   #   ) +
-#   #   scale_fill_brewer(palette = "Set1") +
-#   #   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-#   
-#   
-#   # Créer le graphique à barres avec des facettes pour chaque test
-#   ggplot(data_long, aes(x = model, y = value, fill = metric)) +
-#     geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
-#     geom_text(aes(label = round(value*100, 1)), 
-#               position = position_dodge(width = 0.8), 
-#               vjust = -0.5) + 
-#     facet_wrap(~ test, ncol = 2) +
-#     labs(x = "Models", y = "Scores", title = "Comparaison des métriques par modèle et test") +
-#     theme_minimal() +
-#     theme(axis.text.x = element_text(size =  12,face = 'bold'),
-#           axis.text.y =  element_text(size =  12,face = 'bold'),
-#           plot.title = element_text(size = 14, face = "bold"),
-#           axis.title.x = element_text(size = 13, face = "bold"),
-#           axis.title.y = element_text(size = 13, face = "bold"),
-#           strip.text = element_text(size = 12, face = "bold"),
-#           legend.text = element_text(size =10, face = 'bold'),
-#           legend.title = element_text(size =12, face = 'bold')
-#     ) + 
-#     scale_fill_brewer(palette = "Set1") +
-#     # scale_fill_manual(values = custom_colors) +
-#     theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
-#   
-# }
-
 }) 
-
-# 

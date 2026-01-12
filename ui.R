@@ -111,11 +111,27 @@ shinyUI(fluidPage(
         conditionalPanel(condition ="input.confirmdatabutton!=0",
                          hr(),
                          fluidRow(
-                           column(3,checkboxInput("invers", "inverse" , value = FALSE)),
-                           column(8,
-                                  p(textOutput("positif",inline=T),HTML( '&#x21D2;'), "case ",br(),
-                                    textOutput("negatif",inline=T),HTML( '&#x21D2;'), "control",align="center")
+                           column(1
+                                    ,
+                                   shinyjs::disabled(
+                                     checkboxInput("invers", " " , value = FALSE)
+                                   )
+                                  ),
+                           column(11,
+                                  h4("Classes in learning dataset:"),
+                                  textOutput("positif",inline=T)
+                                  # p(textOutput("positif",inline=T),HTML( '&#x21D2;'), "case ",br(),
+                                  #   textOutput("negatif",inline=T),HTML( '&#x21D2;'), "control",align="center")
                            )
+                           
+                           # column(12,
+                           #        h4("Classes in dataset:"),
+                           #        textOutput("class_summary"),
+                           #        tags$head(tags$style("#class_summary{color: #007bff;font-size: 16px;font-weight: bold;}")),
+                           #        br(),
+                           #        uiOutput("class_count_indicator"),
+                           #        tags$head(tags$style("#class_count_indicator{color: #28a745;font-size: 15px;font-weight: bold;background-color: #f0f9ff;padding: 8px;border-radius: 5px;border-left: 4px solid #28a745;}"))
+                           # )
                          ),
                          hr(),
                          radioButtons("paramdownplot","Download images as",choices=list("png"="png","jpg"="jpg","pdf"="pdf"),selected="png"),
@@ -268,9 +284,9 @@ shinyUI(fluidPage(
                                               column(6,
                                                      radioButtons("test", "Variable Selection Methods",
                                                                   c("No test"="notest",
-                                                                    "Wilcoxon Test (univariate)" = "Wtest",
+                                                                    "Kruskal-wallis Test (univariate)" = "Kruskal",
                                                                     # "Clustering + ElasticNet (multivariate)" = "clustEnet",
-                                                                    "Student Test (univariate)" = "Ttest",
+                                                                    "Anova Test" = "ANOVA",
                                                                     "Lasso (multivariate)" = "lasso",
                                                                     "ElasticNet (multivariate)" = "elasticnet"
                                                                     # ,
@@ -286,7 +302,7 @@ shinyUI(fluidPage(
                                                      conditionalPanel(condition ="input.help",helpText("The shapiro test is a test of normallity. The F test is a test of equality of variance."))
                                               ),
                                               column(6,br(),
-                                                     conditionalPanel(condition ="input.test=='Wtest' || input.test=='Ttest'",
+                                                     conditionalPanel(condition ="input.test=='Kruskal' || input.test=='ANOVA'",
                                                                       numericInput("thresholdFC","Fold change threshold" , 0, min =0, max = 5, step = 0.5),
                                                                       conditionalPanel(condition ="input.help",helpText("Fold Change is the ratio of means between groups.")),
                                                                       numericInput("thresholdpv","p-value threshold" , 0.05, min =0, max = 1, step = 0.01),
@@ -322,7 +338,7 @@ shinyUI(fluidPage(
                                             ),br(),
                                             p(downloadButton('downloaddatastatistics', 'Download statistics'),downloadButton('downloadddatadiff', 'Download differently expressed variables'),align="center"),
                                             hr(),
-                                            conditionalPanel(condition= "input.test== 'Wtest' || input.test== 'Ttest'",
+                                            conditionalPanel(condition= "input.test=='Kruskal' || input.test=='ANOVA'",
                                                              fluidRow(
                                                                column(6,
                                                                       textOutput("nvarselect2",inline=T), "selected variables",
@@ -726,40 +742,40 @@ shinyUI(fluidPage(
                                                                                p(downloadButton("downloadplotdecouvroc","Download plot"),
                                                                                  downloadButton('downloaddatadecouvroc', 'Download raw data'),align="center")
                                                                         ),
-                                                                        column(4,
+                                                                        column(6,
                                                                                plotOutput("tabmodeldecouv", height = "400px")
                                                                                
                                                                                # plotOutput("plotmodeldecouvbp")%>% withSpinner(color="#0dc5c1",type = 1),
                                                                                # p(downloadButton("downloadplotmodeldecouvbp","Download plot"),
                                                                                #   downloadButton('downloaddatamodeldecouvbp', 'Download raw data'),align="center")
                                                                         ),
-                                                                        column(2,
-                                                                               conditionalPanel(condition="input.plotscoremodel=='points'",
-                                                                                                checkboxInput("shownames1","show indivuals names",value=FALSE)
-                                                                                                ),
-                                                                                 br(),
-                                                                               
-                                                                               h4("Métriques Moyennes"),
-                                                                               tableOutput("average_metrics_decouv")
-                                                                               # ,
-                                                                               # 
-                                                                               #   "Sensibility = ",textOutput("sensibilitydecouv",inline=T), 
-                                                                               #   br(),
-                                                                               #   "Specificity = ",textOutput("specificitydecouv",inline=T) #,
-                                                                               #   conditionalPanel(
-                                                                               #             condition = "output.fileUploaded",
-                                                                               #             h4("Métriques Détaillées par Classe"),
-                                                                               #             tableOutput("detailed_metrics_decouv"),
-                                                                               #             h4("Métriques Moyennes"),
-                                                                               #             tableOutput("average_metrics_decouv")
-                                                                               # )
-                                                                               # br(),hr(),br(),
-                                                                               # tableOutput("youndendecouv")
-                                                                               
-                                                                        ),
+                                                                        #column(),
                                                                         fluidRow(
                                                                           column(
-                                                                            width = 7
+                                                                            width = 7,
+                                                                            conditionalPanel(condition="input.plotscoremodel=='points'",
+                                                                                             checkboxInput("shownames1","show indivuals names",value=FALSE)
+                                                                            ),
+                                                                            br(),
+                                                                            
+                                                                            h4("Métriques Moyennes"),
+                                                                            tableOutput("average_metrics_decouv")
+                                                                            # ,
+                                                                            # 
+                                                                            #   "Sensibility = ",textOutput("sensibilitydecouv",inline=T), 
+                                                                            #   br(),
+                                                                            #   "Specificity = ",textOutput("specificitydecouv",inline=T) #,
+                                                                            #   conditionalPanel(
+                                                                            #             condition = "output.fileUploaded",
+                                                                            #             h4("Métriques Détaillées par Classe"),
+                                                                            #             tableOutput("detailed_metrics_decouv"),
+                                                                            #             h4("Métriques Moyennes"),
+                                                                            #             tableOutput("average_metrics_decouv")
+                                                                            # )
+                                                                            # br(),hr(),br(),
+                                                                            # tableOutput("youndendecouv")
+                                                                            
+                                                                            
                                                                           ),
                                                                           column(
                                                                             5,
@@ -782,26 +798,27 @@ shinyUI(fluidPage(
                                                                                                 p(downloadButton("downloadplotvalroc","Download plot"),
                                                                                                   downloadButton('downloaddatavalroc', 'Download raw data'),align="center")
                                                                                          ),
-                                                                                         column(4,
+                                                                                         column(6,
                                                                                                 plotOutput("tabmodelval", height = "400px")
                                                                                                 
                                                                                                 ),
-                                                                                         column(2,
-                                                                                                #conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames2","show indivuals names",value=FALSE)),
-                                                                                                h4("Métriques Moyennes"),
-                                                                                                tableOutput("average_metrics_val")
-                                                                                                # ,
-                                                                                                # "Sensibility = ",textOutput("sensibilityval",inline=T), 
-                                                                                                # br(),
-                                                                                                # "Specificity = ",textOutput("specificityval",inline=T)
-                                                                                                
-                                                                                                # 
-                                                                                                # br(),hr(),br(),
-                                                                                                # tableOutput("youndenval")
-                                                                                                
-                                                                                         ),
+                                                                                         # column(),
                                                                                          fluidRow(
-                                                                                           column(7
+                                                                                           column(7,
+                                                                                                  
+                                                                                                  #conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames2","show indivuals names",value=FALSE)),
+                                                                                                  h4("Métriques Moyennes"),
+                                                                                                  tableOutput("average_metrics_val")
+                                                                                                  # ,
+                                                                                                  # "Sensibility = ",textOutput("sensibilityval",inline=T), 
+                                                                                                  # br(),
+                                                                                                  # "Specificity = ",textOutput("specificityval",inline=T)
+                                                                                                  
+                                                                                                  # 
+                                                                                                  # br(),hr(),br(),
+                                                                                                  # tableOutput("youndenval")
+                                                                                                  
+                                                                                                  
                                                                                                   ),
                                                                                            column(
                                                                                              width = 5,
@@ -875,17 +892,17 @@ shinyUI(fluidPage(
                                                          #fluidRow(
                                                          column(3,
                                                                 checkboxGroupInput("testtest", "Tests",
-                                                                                   #c( "No test"="notest","Wilcoxon Test" = "Wtest","Student Test" = "Ttest"),
+                                                                                   
                                                                                    c( "No test"="notest",
-                                                                                      "Wilcoxon Test" = "Wtest",
-                                                                                      "Student Test" = "Ttest",
+                                                                                      "Wilcoxon Test" = "Kruskal",
+                                                                                      "Student Test" = "ANOVA",
                                                                                       # "Clustering + ElasticNet" = "clustEnet",
                                                                                       "Lasso" = "lasso", 
                                                                                       "ElasticNet" = "elasticnet"
                                                                                       # ,
                                                                                       # "Ridge" = "ridge"
                                                                                       ),
-                                                                                   selected = "Wtest"),
+                                                                                   selected = "Kruskal"),
                                                                 checkboxGroupInput("adjustpvtest", "adjust p-value " , 
                                                                                    choices = list("TRUE"=TRUE,"FALSE"=FALSE),
                                                                                    inline = TRUE,
@@ -993,14 +1010,3 @@ shinyUI(fluidPage(
       )
     )
     )
-
-
-#*  voici les prinpal modifcation pour faire passer cette application de la classification biniare a la classfication multi-classes:
-#*  1- dans la partie variables selection :  remplacer les test de stat de mann-whiteny par le test de kruskal-wallis et test t par anova 
-#*  2- dans la partie modelisation : adapter les modeles pour la classification multi-classes (svm, randomforest, xgboost, knn, naivebayes)
-#*  3- adapter les courbes roc pour la classification multi-classes (utilisation de la methode one-vs-all)
-#*  4- adapter les methodes d'evaluation des modeles pour la classification multi-classes (accuracy, macro/micro F1-score, macro/micro AUC)
-#*  5- adapter les parametres de selection des modeles pour la classification multi-classes
-#*  6. affiche de la matrice de confusion pour la classification multi-classes
-#*  7. adapter les methodes de visualisation des resultats pour la classification multi-classes (heatmap des predictions, courbes PR multi-classes)
-#* 8- adapter les methodes de validation croisee pour la classification multi-classes   
