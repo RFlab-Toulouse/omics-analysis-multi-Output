@@ -8,6 +8,7 @@ usePackage <- function(p) {
   require(p, character.only = TRUE)
 }
 usePackage("zoo")
+usePackage("plotly")
 usePackage("missMDA")#imputepca
 usePackage("ggplot2")#Graphs
 usePackage("stats")
@@ -1196,7 +1197,7 @@ multivariateselection<-function(toto, method="lasso", lambda=NULL, alpha=0.5, nl
     auc_values <- sapply(selected_vars, function(var){
       tryCatch({
         roc_obj <- multiclass.roc(toto[,1], x[, var], quiet=TRUE)
-        as.numeric(auc(roc_obj))
+        round(as.numeric(auc(roc_obj)),3)
       }, error = function(e) return(0.5))
     })
     
@@ -1242,7 +1243,7 @@ multivariateselection<-function(toto, method="lasso", lambda=NULL, alpha=0.5, nl
     
     # Ajouter mean_overall pour multi-classe
     if(n_classes > 2){
-      results$mean_overall <- rowMeans(means_matrix)
+      results$mean_overall <- round(rowMeans(means_matrix), 3)
     }
     
     # Add means for each class
@@ -2242,7 +2243,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
                           transformdataparameters, datastructuresfeatures, 
                           learningselect = NULL) {
   if(modelparameters$modeltype!="nomodel"){ 
-    colnames(learningmodel)[1]<-"group"
+    # colnames(learningmodel)[1]<-"group"
     # Définir les groupes/niveaux
     lev <- levels(learningmodel[,1])
     # groups <- c("positif" = lev[1], "negatif" = lev[2])
@@ -2393,6 +2394,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
                                 y = learningmodel[,1],
                                 gamma = 10^(-5:2), 
                                 cost = 10^(-3:2),
+                                probability = TRUE,
                                 cross = min(nrow(learningmodel)-2, 10))
         
         cost_param <- tune_result$best.parameters$cost
@@ -2436,14 +2438,14 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         # Classification multi-classe - avec probabilités
         cat("  Multi-class SVM with probability=TRUE\n")
         print(colnames(learningmodel))
-        model <- svm( group ~ ., data = learningmodel,
-                     # x = learningmodel[,-1], 
-                     # y = learningmodel[,1],
+        model <- svm( #group ~ ., data = learningmodel,
+                      x = learningmodel[,-1], 
+                      y = learningmodel[,1],
                      kernel = kernel_param, 
                      cost = cost_param, 
                      gamma = gamma_param,
                      scale = FALSE,
-                     probability = TRUE)  # Important pour multi-classe!
+                     probability = TRUE)
         
         cat("affchage du modele svm  :  \n")
         print(model)
@@ -2453,7 +2455,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         model$kernel <- kernel_param
         
         # Obtenir les probabilités
-        pred_with_prob <- e1071:::predict.svm(model, learningmodel[,-1], probability = TRUE)
+        pred_with_prob <- e1071:::predict.svm(model, learningmodel, probability = TRUE)
         scorelearning <- attr(pred_with_prob, "probabilities")
         
         # Réorganiser les colonnes pour correspondre à l'ordre de lev
@@ -4514,4 +4516,96 @@ positive<-function(x){
   if(x<0){x<-0}
   else{x}
   return(x)
+}
+
+# Fonction pour créer une visualisation PCA 2D interactive avec plotly
+PlotPca2D_interactive <- function(data, y, title = "PCA 2D des variables sélectionnées") {
+  # Effectuer la PCA
+  pca_result <- prcomp(data, center = TRUE, scale. = TRUE)
+  
+  # Calculer la variance expliquée
+  var_explained <- round(100 * pca_result$sdev^2 / sum(pca_result$sdev^2), 1)
+  
+  # Créer le dataframe pour plotly
+  pca_data <- data.frame(
+    PC1 = pca_result$x[, 1],
+    PC2 = pca_result$x[, 2],
+    Group = as.factor(y),
+    Sample = rownames(data)
+  )
+  
+  # Créer le graphique interactif avec plotly
+  plot_ly(pca_data, 
+          x = ~PC1, 
+          y = ~PC2, 
+          color = ~Group,
+          colors = c("#E69F00", "#56B4E9"),
+          type = 'scatter',
+          mode = 'markers',
+          marker = list(size = 10, opacity = 0.7),
+          text = ~paste("Sample:", Sample, "<br>Group:", Group),
+          hoverinfo = 'text') %>%
+    layout(
+      title = list(text = title, font = list(size = 16, face = "bold")),
+      xaxis = list(title = paste0("PC1 (", var_explained[1], "% variance)"),
+                   titlefont = list(size = 14, face = "bold")),
+      yaxis = list(title = paste0("PC2 (", var_explained[2], "% variance)"),
+                   titlefont = list(size = 14, face = "bold")),
+      legend = list(title = list(text = "Groupe"))
+    )
+}
+
+
+# Fonction pour créer une visualisation PCA 3D interactive avec plotly
+PlotPca3D_interactive <- function(data, y, title = "PCA of selected variables") {
+  # Effectuer la PCA
+  pca_result <- prcomp(data, center = TRUE, scale. = TRUE)
+  
+  # Calculer la variance expliquée
+  var_explained <- round(100 * pca_result$sdev^2 / sum(pca_result$sdev^2), 1)
+  
+  # Vérifier qu'il y a au moins 3 composantes principales
+  if(ncol(pca_result$x) < 3) {
+    stop("Not enough main components for 3D visualisation")
+  }
+  
+  # Créer le dataframe pour plotly
+  pca_data <- data.frame(
+    PC1 = pca_result$x[, 1],
+    PC2 = pca_result$x[, 2],
+    PC3 = pca_result$x[, 3],
+    Group = as.factor(y),
+    Sample = rownames(data)
+  )
+  
+  # Créer le graphique 3D interactif avec plotly
+  plot_ly(pca_data, 
+          x = ~PC1, 
+          y = ~PC2, 
+          z = ~PC3,
+          color = ~Group,
+          colors = c("#E69F00", "#56B4E9"),
+          type = 'scatter3d',
+          mode = 'markers',
+          marker = list(size = 6, opacity = 0.7),
+          text = ~paste("Sample:", Sample, "<br>Group:", Group),
+          hoverinfo = 'text') %>%
+    layout(
+      title = list(text = title, font = list(size = 16)),
+      scene = list(
+        xaxis = list(title = paste0("PC1 (", var_explained[1], "%)")),
+        yaxis = list(title = paste0("PC2 (", var_explained[2], "%)")),
+        zaxis = list(title = paste0("PC3 (", var_explained[3], "%)"))
+      ),
+      legend = list(title = list(text = "Groupe"))
+    )
+}
+
+
+# Fonction combinée qui crée les deux visualisations (2D et 3D)
+PlotPca_Combined <- function(data, y, title_prefix = "PCA") {
+  list(
+    pca_2d = PlotPca2D_interactive(data, y, paste(title_prefix, "- Vue 2D")),
+    pca_3d = PlotPca3D_interactive(data, y, paste(title_prefix, "- Vue 3D"))
+  )
 }

@@ -399,9 +399,115 @@ shinyUI(fluidPage(
                                                                     plotOutput("plottestSF")%>% withSpinner(color="#0dc5c1",type = 1),
                                                                     p(downloadButton("downloadplottestSF","Download plot"),downloadButton('downloaddatatestSF', 'Download raw data'),align="center"))
                                                              
-                                            )
-                                   )
-                                   ,
+                                            ),
+                                            hr(),
+                                            fluidRow(
+                                              column(12,
+                                                     h4("Principal component analysis (PCA)", align = "center"),
+                                                     helpText(" ")
+                                              )
+                                            ),
+                                            
+                                            fluidRow(
+                                              column(6,
+                                                     h5(" 2D View (PC1 vs PC2)"),
+                                                     plotlyOutput("pca_plot_2d_stats", height = "450px") %>% 
+                                                       withSpinner(color = "#0dc5c1", type = 1)
+                                              ),
+                                              column(6,
+                                                     h5("3D  view (PC1 vs PC2 vs PC3)"),
+                                                     plotlyOutput("pca_plot_3d_stats", height = "450px") %>% 
+                                                       withSpinner(color = "#0dc5c1", type = 1)
+                                              )
+                                            ),
+                                            
+                                            p(downloadButton("download_pca_combined", "Download images"), align = "center")
+                                   ),
+                                   # tabPanel("PCA Visualization", icon = icon("chart-area"),
+                                   #          br(),
+                                   #          conditionalPanel(condition = "input.help",
+                                   #                           helpText("Visualisations PCA (Analyse en Composantes Principales) des variables sélectionnées."),
+                                   #                           helpText("Les graphiques sont colorés selon les vrais labels du jeu d'entraînement."),
+                                   #                           helpText("La vue 2D montre les 2 premières composantes principales."),
+                                   #                           helpText("La vue 3D montre les 3 premières composantes principales (interactif - vous pouvez faire pivoter le graphique).")
+                                   #          ),
+                                   #          
+                                   #          fluidRow(
+                                   #            column(12,
+                                   #                   h4("Analyse en Composantes Principales (PCA)", align = "center"),
+                                   #                   hr()
+                                   #            )
+                                   #          ),
+                                   #          
+                                   #          # Section pour sélectionner les données à visualiser
+                                   #          fluidRow(
+                                   #            column(4,
+                                   #                   radioButtons("pca_data_source", 
+                                   #                                "Source des données pour la PCA:",
+                                   #                                choices = c(
+                                   #                                  "Données transformées" = "transformed",
+                                   #                                  "Variables sélectionnées (test statistique)" = "selected",
+                                   #                                  "Variables du modèle" = "model"
+                                   #                                ),
+                                   #                                selected = "transformed")
+                                   #            ),
+                                   #            column(4,
+                                   #                   conditionalPanel(
+                                   #                     condition = "input.pca_data_source == 'model'",
+                                   #                     helpText("Utilise les variables incluses dans le modèle de prédiction")
+                                   #                   ),
+                                   #                   conditionalPanel(
+                                   #                     condition = "input.pca_data_source == 'selected'",
+                                   #                     helpText("Utilise les variables sélectionnées par le test statistique")
+                                   #                   ),
+                                   #                   conditionalPanel(
+                                   #                     condition = "input.pca_data_source == 'transformed'",
+                                   #                     helpText("Utilise toutes les variables après transformation")
+                                   #                   )
+                                   #            ),
+                                   #            column(4,
+                                   #                   textOutput("pca_n_variables", inline = TRUE),
+                                   #                   " variables utilisées pour la PCA"
+                                   #            )
+                                   #          ),
+                                   #          
+                                   #          hr(),
+                                   #          
+                                   #          # Visualisation 2D
+                                   #          fluidRow(
+                                   #            column(12,
+                                   #                   h5("Vue 2D (PC1 vs PC2)", style = "font-weight: bold;"),
+                                   #                   plotlyOutput("pca_plot_2d", height = "500px") %>% 
+                                   #                     withSpinner(color = "#0dc5c1", type = 1),
+                                   #                   p(downloadButton("download_pca_2d", "Télécharger la vue 2D"), align = "center")
+                                   #            )
+                                   #          ),
+                                   #          
+                                   #          hr(),
+                                   #          
+                                   #          # Visualisation 3D
+                                   #          fluidRow(
+                                   #            column(12,
+                                   #                   h5("Vue 3D (PC1 vs PC2 vs PC3) - Interactif", style = "font-weight: bold;"),
+                                   #                   helpText("Vous pouvez faire pivoter le graphique 3D avec la souris pour explorer les données sous différents angles."),
+                                   #                   plotlyOutput("pca_plot_3d", height = "600px") %>% 
+                                   #                     withSpinner(color = "#0dc5c1", type = 1),
+                                   #                   p(downloadButton("download_pca_3d", "Télécharger la vue 3D"), align = "center")
+                                   #            )
+                                   #          ),
+                                   #          
+                                   #          hr(),
+                                   #          
+                                   #          # Tableau de variance expliquée
+                                   #          fluidRow(
+                                   #            column(12,
+                                   #                   h5("Variance expliquée par les composantes principales", style = "font-weight: bold;"),
+                                   #                   dataTableOutput("pca_variance_table") %>% 
+                                   #                     withSpinner(color = "#0dc5c1", type = 1),
+                                   #                   p(downloadButton("download_pca_variance", "Télécharger le tableau"), align = "center")
+                                   #            )
+                                   #          )
+                                   # ),
                                    tabPanel("Model", icon = icon("cogs"),
                                             fluidRow(
                                               column(4,
