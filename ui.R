@@ -37,7 +37,7 @@ shinyUI(fluidPage(
   titlePanel(
     div(
       img(src = 'dna-structure.png', height = "40px", width = "40px"),
-      "Omics analysis multi-label"
+      "Omics analysis : multi-label classification"
      ) 
     ),
   hr(nrow = 2),
@@ -669,8 +669,11 @@ shinyUI(fluidPage(
                                                                                textOutput('nbselectmodel',inline=T),'selected variables',
                                                                                h3("Model Learning")
                                                                         ),
-                                                                        column(4,br(),downloadButton('downloaddatalearning', 'Download learning data')),
-                                                                        column(4,radioButtons("plotscoremodel", "",c( "boxplot"="boxplot","points" = "points")))
+                                                                        column(4,br(),downloadButton('downloaddatalearning', 'Download learning data'))
+                                                                        # ,
+                                                                        # column(4,radioButtons("plotscoremodel", "",c( "boxplot"="boxplot","points" = "points"))
+                                                                        #        )
+                                                                        
                                                                       ),
                                                                       conditionalPanel(condition ="input.model=='elasticnet' || input.model=='svm' || input.model=='randomforest' || input.model=='xgboost'",
                                                                                        fluidRow(

@@ -214,16 +214,16 @@ importfunction<-function(importparameters){
       
 
       if(is.factor(learning[,1]) || is.character(learning[,1]) ){
-        learning[,1]<-as.factor(as.character(learning[,1]))
-        print(learning[,1])
-        categories_learning =  cut( as.numeric(learning[, 1]),
-                                    breaks = c(0, 15, 30, 45, 60, 90, Inf),
-                                    labels = c("Stage 5", "Stage 4", "Stage 3b", "Stage 3a", "Stage 2", "Stage 1")
-        )
-        
-        learning[, 1] = categories_learning
-        
-        print(learning[,1])
+        # learning[,1]<-as.factor(as.character(learning[,1]))
+        # print(learning[,1])
+        # categories_learning =  cut( as.numeric(learning[, 1]),
+        #                             breaks = c(0, 15, 30, 45, 60, 90, Inf),
+        #                             labels = c("Stage 5", "Stage 4", "Stage 3b", "Stage 3a", "Stage 2", "Stage 1")
+        # )
+        # 
+        # learning[, 1] = categories_learning
+        # 
+        # print(learning[,1])
         cat("target ok!")
       }else{
         categories_learning =  cut( as.numeric(learning[, 1]),
@@ -274,15 +274,15 @@ importfunction<-function(importparameters){
       
         if(is.factor(validation[,1]) || is.character(validation[,1]) ){
           
-          validation[,1]<-as.factor(as.character(validation[,1]))
-          categories_validation =  cut(as.numeric( validation[, 1]),
-                                        breaks = c(0, 15, 30, 45, 60, 90, Inf),
-                                        labels = c("Stage 5", "Stage 4", "Stage 3b", "Stage 3a", "Stage 2", "Stage 1")
-          )
-          validation[, 1] = categories_validation
-          
-          cat("validation label status : \n")
-          print( validation[, 1])
+          # validation[,1]<-as.factor(as.character(validation[,1]))
+          # categories_validation =  cut(as.numeric( validation[, 1]),
+          #                               breaks = c(0, 15, 30, 45, 60, 90, Inf),
+          #                               labels = c("Stage 5", "Stage 4", "Stage 3b", "Stage 3a", "Stage 2", "Stage 1")
+          # )
+          # validation[, 1] = categories_validation
+          # 
+          # cat("validation label status : \n")
+          # print( validation[, 1])
           cat("target ok!")
           
         }else{
@@ -4155,13 +4155,10 @@ constructparameters<-function(listparameters){
   return(resparameters)
 }
 
+
+
 testparametersfunction<-function(learning,validation,tabparameters){
   set.seed(20011203)
-  # results<-matrix(data = NA,nrow =nrow(tabparameters), ncol=9 )
-  # colnames(results)<-c("auc validation","sensibility validation","specificityvalidation",
-  #                      "auc learning","sensibility learning","specificity learning",
-  #                      "number of features in model","number of differented features",
-  #                      "number of features selected")
   
   results<-matrix(data = NA,nrow =nrow(tabparameters), ncol=10)
   colnames(results)<-c("auc validation","sensibility validation","specificity validation",
@@ -4169,27 +4166,38 @@ testparametersfunction<-function(learning,validation,tabparameters){
                        "threshold used","number of features in model",
                        "number of differented features","number of features selected")
   print(paste(nrow(tabparameters),"parameters "))
+  
   for (i in 1:nrow(tabparameters)){
     print(i)
     parameters<-tabparameters[i,]
     if(!parameters$NAstructure){tabparameters[i,c("thresholdNAstructure","structdata","maxvaluesgroupmin","minvaluesgroupmax")]<-rep(x = NA,4)    }
-    #selectdataparameterst<-parameters[1:7]
+    
     selectdataparameters<<-list("prctvalues"=parameters$prctvalues,
                                 "selectmethod"=parameters$selectmethod,
                                 "NAstructure"=parameters$NAstructure,
                                 "structdata"=parameters$structdata,
                                 "thresholdNAstructure"=parameters$thresholdNAstructure,
-                                "maxvaluesgroupmin"=parameters$maxvaluesgroupmin,"minvaluesgroupmax"=parameters$minvaluesgroupmax)
+                                "maxvaluesgroupmin"=parameters$maxvaluesgroupmin,
+                                "minvaluesgroupmax"=parameters$minvaluesgroupmax)
     resselectdata<<-selectdatafunction(learning = learning,selectdataparameters = selectdataparameters)
     
-    #transformdataparameters<<-parameters[8:11]
     if(!parameters$log){tabparameters[i,"logtype"]<-NA}
-    transformdataparameters<<-list("log"=parameters$log,"logtype"=parameters$logtype,"standardization"=parameters$standardization,"arcsin"=parameters$arcsin,"rempNA"=parameters$rempNA)
+    transformdataparameters<<-list("log"=parameters$log,
+                                   "logtype"=parameters$logtype,
+                                   "standardization"=parameters$standardization,
+                                   "arcsin"=parameters$arcsin,
+                                   "rempNA"=parameters$rempNA)
     
-    learningtransform<-transformdatafunction(learningselect = resselectdata$learningselect,structuredfeatures = resselectdata$structuredfeatures,
-                                             datastructuresfeatures =   resselectdata$datastructuresfeatures,transformdataparameters = transformdataparameters)
+    learningtransform<-transformdatafunction(learningselect = resselectdata$learningselect,
+                                             structuredfeatures = resselectdata$structuredfeatures,
+                                             datastructuresfeatures = resselectdata$datastructuresfeatures,
+                                             transformdataparameters = transformdataparameters)
     
-    testparameters<<-list("SFtest"=FALSE,"test"=parameters$test,"adjustpval"=as.logical(parameters$adjustpv),"thresholdpv"=parameters$thresholdpv,"thresholdFC"=parameters$thresholdFC)
+    testparameters<<-list("SFtest"=FALSE,
+                          "test"=parameters$test,
+                          "adjustpval"=as.logical(parameters$adjustpv),
+                          "thresholdpv"=parameters$thresholdpv,
+                          "thresholdFC"=parameters$thresholdFC)
     restest<<-testfunction(tabtransform = learningtransform,testparameters = testparameters)
     
     if(parameters$test=="notest"){
@@ -4199,199 +4207,138 @@ testparametersfunction<-function(learning,validation,tabparameters){
     else{learningmodel<-restest$tabdiff}
     
     if(ncol(learningmodel)!=0){
-    
-    # Determine if automatic tuning should be used based on tuning_method parameter
-    use_autotuning <- (!is.null(parameters$tuning_method) && parameters$tuning_method == "automatic")
-    
-    # Set autotuning flags for each model type
-    autotunerf_flag <- use_autotuning
-    autotunesvm_flag <- use_autotuning
-    autotunexgb_flag <- use_autotuning
-    autotunelgb_flag <- use_autotuning
-    autotuneknn_flag <- use_autotuning
       
-    modelparameters<<-list("modeltype"=parameters$model,
-                           "invers"=FALSE,
-                           "thresholdmodel"=parameters$thresholdmodel,
-                           "fs"=as.logical(parameters$fs),
-                           "adjustval"=!is.null(validation),
-                           "autotunerf"=autotunerf_flag,
-                           "autotunesvm"=autotunesvm_flag,
-                           "autotunexgb"=autotunexgb_flag,
-                           "autotunelgb"=autotunelgb_flag,
-                           "autotuneknn"=autotuneknn_flag
-                           )
-    validate(need(ncol(learning)!=0,"No select dataset"))
-    
-
-    #resmodel<<-modelfunction(learningmodel = learningmodel,validation = validation,modelparameters = modelparameters,
-    #                         transformdataparameters = transformdataparameters,datastructuresfeatures =  datastructuresfeatures)
-    out<- tryCatch(modelfunction(learningmodel = learningmodel,
-                                 validation = validation,
-                                 modelparameters = modelparameters,
-                                 transformdataparameters = transformdataparameters,
-                                 datastructuresfeatures =  datastructuresfeatures,
-                                 learningselect = resselectdata$learningselect), 
-                   error = function(e) e)
-    if(any(class(out)=="error"))parameters$model<-"nomodel"
-    else{
+      # Determine if automatic tuning should be used based on tuning_method parameter
+      use_autotuning <- (!is.null(parameters$tuning_method) && parameters$tuning_method == "automatic")
       
-      resmodel<-out
+      # Set autotuning flags for each model type
+      autotunerf_flag <- use_autotuning
+      autotunesvm_flag <- use_autotuning
+      autotunexgb_flag <- use_autotuning
+      autotunelgb_flag <- use_autotuning
+      autotuneknn_flag <- use_autotuning
       
-      # Apply threshold optimization if requested
-      if(!is.null(parameters$threshold_method) && parameters$threshold_method != "fixed" && parameters$model != "nomodel"){
-        tryCatch({
-          # Calculate optimal threshold from ROC curve on learning data
-          classlearning <- resmodel$datalearningmodel$reslearningmodel$classlearning
-          scorelearning <- resmodel$datalearningmodel$reslearningmodel$scorelearning
-          
-          # Create ROC object
-          roc_obj <- roc(classlearning, scorelearning, quiet=TRUE)
-          
-          # # Find optimal threshold based on selected method
-          # if(parameters$threshold_method == "youden"){
-          #   # Youden method: maximizes sensitivity + specificity - 1
-          #   optimal_coords <- coords(roc_obj, "best", best.method="youden", ret=c("threshold", "sensitivity", "specificity"))
-          #   optimal_threshold <- optimal_coords$threshold
-          #   
-          #   # Display optimization results
-          #   cat(sprintf("    ✓ Youden optimization (iter %d): threshold=%.4f (sens=%.3f, spec=%.3f, Youden=%.3f)\n",
-          #               i, optimal_threshold,
-          #               optimal_coords$sensitivity,
-          #               optimal_coords$specificity,
-          #               optimal_coords$sensitivity + optimal_coords$specificity - 1))
-          #   
-          # } else if(parameters$threshold_method == "equiprob"){
-          #   # Equiprobability method: closest point to diagonal (minimizes |FP-FN|)
-          #   optimal_coords <- coords(roc_obj, "best", best.method="closest.topleft", ret=c("threshold", "sensitivity", "specificity"))
-          #   optimal_threshold <- optimal_coords$threshold
-          #   
-          #   # Calculate false positive and false negative rates for display
-          #   fp_rate <- 1 - optimal_coords$specificity
-          #   fn_rate <- 1 - optimal_coords$sensitivity
-          #   
-          #   # Display optimization results
-          #   cat(sprintf("    ✓ Equiprobability optimization (iter %d): threshold=%.4f (sens=%.3f, spec=%.3f, FPR=%.3f, FNR=%.3f)\n",
-          #               i, optimal_threshold,
-          #               optimal_coords$sensitivity,
-          #               optimal_coords$specificity,
-          #               fp_rate, fn_rate))
-          # }
-          
-          # Recalculate predicted classes using optimal threshold for learning data
-          # IMPORTANT: In this application, levels(classlearning)[1] = "positif" (case)
-          # Score represents probability of being positive, so high score → predict positive
-          # Therefore: score >= threshold → levels[1] (positif), score < threshold → levels[2] (negatif)
-          resmodel$datalearningmodel$reslearningmodel$predictclasslearning <- ifelse(scorelearning >= optimal_threshold, levels(classlearning)[1], levels(classlearning)[2])
-          resmodel$datalearningmodel$reslearningmodel$predictclasslearning <- factor(resmodel$datalearningmodel$reslearningmodel$predictclasslearning, levels = levels(classlearning))
-          
-          # If validation data exists, apply optimal threshold to validation predictions as well
-          # Same logic: high score → predict positive (level 1)
-          if(!is.null(validation)){
-            classval <- resmodel$datavalidationmodel$resvalidationmodel$classval
-            scoreval <- resmodel$datavalidationmodel$resvalidationmodel$scoreval
-            resmodel$datavalidationmodel$resvalidationmodel$predictclassval <- ifelse(scoreval >= optimal_threshold, levels(classval)[1], levels(classval)[2])
-            resmodel$datavalidationmodel$resvalidationmodel$predictclassval <- factor(resmodel$datavalidationmodel$resvalidationmodel$predictclassval, levels = levels(classval))
-          }
-          
-          # Update threshold in parameters for record
-          parameters$thresholdmodel <- optimal_threshold
-        }, error = function(e){
-          # If threshold optimization fails, continue with original threshold
-          cat(sprintf("    ✗ Threshold optimization FAILED (iteration %d): %s\n", i, e$message))
-          cat(sprintf("      → Keeping initial threshold: %.4f\n", parameters$thresholdmodel))
-          warning(paste("Threshold optimization failed:", e$message))
-        })
-      } else {
-        # For "fixed" threshold method, use the threshold from parameters (already set to 0.5 for proba, 0 for SVM)
-        # The classes are already predicted in modelfunction with this threshold
-        # No need to recalculate, just ensure threshold is recorded
-        if(parameters$model != "nomodel" && parameters$model != "svm"){
-          # For probabilistic models, threshold should be 0.5 (already set)
-          # For SVM, threshold is 0 (handled in modelfunction)
-          # Just ensure the threshold is recorded correctly
-          if(is.null(parameters$thresholdmodel) || is.na(parameters$thresholdmodel)){
-            parameters$thresholdmodel <- 0.5
-          }
-        }
+      modelparameters<<-list("modeltype"=parameters$model,
+                             "invers"=FALSE,
+                             "thresholdmodel"=parameters$thresholdmodel,
+                             "fs"=as.logical(parameters$fs),
+                             "adjustval"=!is.null(validation),
+                             "autotunerf"=autotunerf_flag,
+                             "autotunesvm"=autotunesvm_flag,
+                             "autotunexgb"=autotunexgb_flag,
+                             "autotunelgb"=autotunelgb_flag,
+                             "autotuneknn"=autotuneknn_flag)
+      validate(need(ncol(learning)!=0,"No select dataset"))
+      
+      # Execute model training
+      out<- tryCatch(modelfunction(learningmodel = learningmodel,
+                                   validation = validation,
+                                   modelparameters = modelparameters,
+                                   transformdataparameters = transformdataparameters,
+                                   datastructuresfeatures = datastructuresfeatures,
+                                   learningselect = resselectdata$learningselect), 
+                     error = function(e) e)
+      
+      if(any(class(out)=="error")){
+        parameters$model<-"nomodel"
       }
-      
-      
-      # # Apply Youden threshold optimization if requested
-      # if(!is.null(parameters$optimize_threshold) && parameters$optimize_threshold && parameters$model != "nomodel"){
-      #   tryCatch({
-      #     # Calculate optimal threshold using Youden method from ROC curve on learning data
-      #     classlearning <- resmodel$datalearningmodel$reslearningmodel$classlearning
-      #     scorelearning <- resmodel$datalearningmodel$reslearningmodel$scorelearning
-      #     
-      #     # Create ROC object
-      #     roc_obj <- roc(classlearning, scorelearning, quiet=TRUE)
-      #     
-      #     # Find optimal threshold using Youden method (maximizes sensitivity + specificity - 1)
-      #     optimal_coords <- coords(roc_obj, "best", best.method="youden", ret=c("threshold", "sensitivity", "specificity"))
-      #     optimal_threshold <- optimal_coords$threshold
-      #     
-      #     # Recalculate predicted classes using optimal threshold for learning data
-      #     #resmodel$datalearningmodel$reslearningmodel$predictclasslearning <- ifelse(scorelearning >= optimal_threshold, levels(classlearning)[2], levels(classlearning)[1])
-      #     # IMPORTANT: In this application, levels(classlearning)[1] = "positif" (case)
-      #     # Score represents probability of being positive, so high score → predict positive
-      #     # Therefore: score >= threshold → levels[1] (positif), score < threshold → levels[2] (negatif)
-      #     resmodel$datalearningmodel$reslearningmodel$predictclasslearning <- ifelse(scorelearning >= optimal_threshold, levels(classlearning)[1], levels(classlearning)[2])
-      #     resmodel$datalearningmodel$reslearningmodel$predictclasslearning <- factor(resmodel$datalearningmodel$reslearningmodel$predictclasslearning, levels = levels(classlearning))
-      #     
-      #     # If validation data exists, apply optimal threshold to validation predictions as well
-      #     if(!is.null(validation)){
-      #       classval <- resmodel$datavalidationmodel$resvalidationmodel$classval
-      #       scoreval <- resmodel$datavalidationmodel$resvalidationmodel$scoreval
-      #       # resmodel$datavalidationmodel$resvalidationmodel$predictclassval <- ifelse(scoreval >= optimal_threshold, levels(classval)[2], levels(classval)[1])
-      #       resmodel$datavalidationmodel$resvalidationmodel$predictclassval <- ifelse(scoreval >= optimal_threshold, levels(classval)[1], levels(classval)[2])
-      #       resmodel$datavalidationmodel$resvalidationmodel$predictclassval <- factor(resmodel$datavalidationmodel$resvalidationmodel$predictclassval, levels = levels(classval))
-      #     }
-      #     
-      #     # Update threshold in parameters for record
-      #     parameters$thresholdmodel <- optimal_threshold
-      #   }, error = function(e){
-      #     # If threshold optimization fails, continue with original threshold
-      #     cat(sprintf("    ✗ Youden optimization FAILED (iteration %d): %s\n", i, e$message))
-      #     cat(sprintf("      → Keeping initial threshold: %.4f\n", parameters$thresholdmodel))
-      #     warning(paste("Threshold optimization failed:", e$message))
-      #   })
-      # }
-      
+      else{
+        resmodel<-out
+        
+        # ============================================================================
+        # MULTI-CLASSE UNIQUEMENT - Pas de threshold optimization
+        # ============================================================================
+        # En multi-classe, la prédiction utilise argmax(probabilités)
+        # Il n'y a pas de notion de seuil unique
+        # Le threshold est toujours NA
+        parameters$thresholdmodel <- NA
+        
+        classlearning <- resmodel$datalearningmodel$reslearningmodel$classlearning
+        n_classes <- length(levels(classlearning))
+        cat(sprintf("  → Multi-class classification: %d classes (%s)\n", 
+                    n_classes, paste(levels(classlearning), collapse=", ")))
+      }
     }
+    else{
+      parameters$model<-"nomodel"
     }
-    else{parameters$model<-"nomodel"}
-    #numberfeaturesselected
-    # results[i,9]<-positive(dim(resselectdata$learningselect)[2]-1)
-    #numberfeaturesdiff
-    #numberfeaturesselected (shifted from 9 to 10)
+    
+    # ============================================================================
+    # CALCUL DES RESULTATS (Multi-classe uniquement)
+    # ============================================================================
+    
+    # Number of features selected (shifted from 9 to 10)
     results[i,10]<-positive(dim(resselectdata$learningselect)[2]-1)
-    #numberfeaturesdiff (shifted from 8 to 9)
+    
+    # Number of differented features (shifted from 8 to 9)
     if(parameters$test!="notest"){
-      results[i,8]<-positive(dim(restest$tabdiff)[2]-1)
+      results[i,9]<-positive(dim(restest$tabdiff)[2]-1)
     }
-    #numberfeaturesmodel
+    
+    # Calculate results if model was successfully trained
     if(parameters$model!="nomodel"){
-      # results[i,7]<-dim(resmodel$datalearningmodel$learningmodel)[2]-1
+      
+      # Number of features in model
       results[i,8]<-dim(resmodel$datalearningmodel$learningmodel)[2]-1
-      #thresholdused (NEW: index 7)
-      results[i,7]<-round(parameters$thresholdmodel, digits = 4)
-      #auclearning
-      results[i,4]<-round(as.numeric(auc(roc(resmodel$datalearningmodel$reslearningmodel$classlearning,resmodel$datalearningmodel$reslearningmodel$scorelearning,quiet=T))),digits = 3)
-      #sensibilitylearning
-      results[i,5]<-sensibility(resmodel$datalearningmodel$reslearningmodel$predictclasslearning,resmodel$datalearningmodel$reslearningmodel$classlearning)
-      #specificitylearning
-      results[i,6]<-specificity(resmodel$datalearningmodel$reslearningmodel$predictclasslearning,resmodel$datalearningmodel$reslearningmodel$classlearning)
+      
+      # Threshold used (always NA for multi-class)
+      results[i,7]<-NA
+      
+      # ============================================================================
+      # AUC LEARNING (Multi-classe avec multiclass.roc)
+      # ============================================================================
+      classlearning <- resmodel$datalearningmodel$reslearningmodel$classlearning
+      scorelearning <- resmodel$datalearningmodel$reslearningmodel$scorelearning
+      
+      # Pour multi-classe, scorelearning doit être une matrice (n_samples x n_classes)
+      # multiclass.roc() calcule l'AUC macro (moyenne des AUC one-vs-all)
+      results[i,4] <- round(as.numeric(auc(multiclass.roc(
+        classlearning, 
+        scorelearning, 
+        quiet=TRUE
+      ))), digits=3)
+      
+      # Sensibility learning (macro average)
+      results[i,5]<-sensibility(
+        resmodel$datalearningmodel$reslearningmodel$predictclasslearning,
+        resmodel$datalearningmodel$reslearningmodel$classlearning
+      )
+      
+      # Specificity learning (macro average)
+      results[i,6]<-specificity(
+        resmodel$datalearningmodel$reslearningmodel$predictclasslearning,
+        resmodel$datalearningmodel$reslearningmodel$classlearning
+      )
+      
+      # ============================================================================
+      # AUC VALIDATION (Multi-classe avec multiclass.roc)
+      # ============================================================================
       if(!is.null(validation)){
-      #aucvalidation
-      results[i,1]<-round(as.numeric(auc(roc(resmodel$datavalidationmodel$resvalidationmodel$classval,resmodel$datavalidationmodel$resvalidationmodel$scoreval,quiet=T))),digits = 3)
-      #sensibilityvalidation
-      results[i,2]<-sensibility(resmodel$datavalidationmodel$resvalidationmodel$predictclassval,resmodel$datavalidationmodel$resvalidationmodel$classval)
-      #specificityvalidation
-      results[i,3]<-specificity(resmodel$datavalidationmodel$resvalidationmodel$predictclassval,resmodel$datavalidationmodel$resvalidationmodel$classval)
-    }
+        classval <- resmodel$datavalidationmodel$resvalidationmodel$classval
+        scoreval <- resmodel$datavalidationmodel$resvalidationmodel$scoreval
+        
+        # Pour multi-classe, scoreval doit être une matrice (n_samples x n_classes)
+        results[i,1] <- round(as.numeric(auc(multiclass.roc(
+          classval, 
+          scoreval, 
+          quiet=TRUE
+        ))), digits=3)
+        
+        # Sensibility validation (macro average)
+        results[i,2]<-sensibility(
+          resmodel$datavalidationmodel$resvalidationmodel$predictclassval,
+          resmodel$datavalidationmodel$resvalidationmodel$classval
+        )
+        
+        # Specificity validation (macro average)
+        results[i,3]<-specificity(
+          resmodel$datavalidationmodel$resvalidationmodel$predictclassval,
+          resmodel$datavalidationmodel$resvalidationmodel$classval
+        )
+      }
     }
   }
+  
   return(cbind(results,tabparameters))
 }
 
