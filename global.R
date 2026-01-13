@@ -2242,7 +2242,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
                           transformdataparameters, datastructuresfeatures, 
                           learningselect = NULL) {
   if(modelparameters$modeltype!="nomodel"){ 
-    
+    colnames(learningmodel)[1]<-"group"
     # Définir les groupes/niveaux
     lev <- levels(learningmodel[,1])
     # groups <- c("positif" = lev[1], "negatif" = lev[2])
@@ -2435,8 +2435,10 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       } else {
         # Classification multi-classe - avec probabilités
         cat("  Multi-class SVM with probability=TRUE\n")
-        model <- svm(x = learningmodel[,-1], 
-                     y = learningmodel[,1],
+        print(colnames(learningmodel))
+        model <- svm( group ~ ., data = learningmodel,
+                     # x = learningmodel[,-1], 
+                     # y = learningmodel[,1],
                      kernel = kernel_param, 
                      cost = cost_param, 
                      gamma = gamma_param,
@@ -3331,7 +3333,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
           predictclassval[which(scoreval >= modelparameters$thresholdmodel)] <- lev["positif"]
           predictclassval[which(scoreval < modelparameters$thresholdmodel)] <- lev["negatif"]
         } else {
-          pred_with_prob <- e1071:::predict.svm(model, validationmodel[,-1], probability=TRUE)
+          pred_with_prob <- e1071:::predict.svm(model, validationmodel, probability=TRUE)
           scoreval <- attr(pred_with_prob, "probabilities")
           if(!is.null(colnames(scoreval))) {
             col_order <- match(lev, colnames(scoreval))
