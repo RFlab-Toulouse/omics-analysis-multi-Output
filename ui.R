@@ -7,9 +7,9 @@ THEMES = c("cerulean", "cosmo", "cyborg", "darkly", "flatly", "journal",
             "superhero")
 shinyUI(fluidPage(
   theme = bslib::bs_theme(
-     bootswatch = "cerulean",
+     bootswatch = "minty",
      #primary = "#EA80FC", 
-     secondary = "#48DAC6"
+     secondary =  "#32a8a2" #"#48DAC6"
     ),
   # div(input_dark_mode(id = "mode",
   #                     mode = "light"),
@@ -336,7 +336,8 @@ shinyUI(fluidPage(
                                                      )
                                               )
                                             ),br(),
-                                            p(downloadButton('downloaddatastatistics', 'Download statistics'),downloadButton('downloadddatadiff', 'Download differently expressed variables'),align="center"),
+                                            p(downloadButton('downloaddatastatistics', 'Download statistics'),
+                                              downloadButton('downloadddatadiff', 'Download differently expressed variables'),align="center"),
                                             hr(),
                                             conditionalPanel(condition= "input.test=='Kruskal' || input.test=='ANOVA'",
                                                              fluidRow(
@@ -347,7 +348,7 @@ shinyUI(fluidPage(
                                                                ),
                                                                column(6,
                                                                       textOutput("nbdiff",inline=T), "differently expressed",
-                                                                      plotOutput("barplottest" ,width = 400,height = 500)%>% withSpinner(color="#0dc5c1",type = 1),   
+                                                                      plotOutput("barplottest" ,width = 500,height = 500)%>% withSpinner(color="#0dc5c1",type = 1),   
                                                                       p(downloadButton("downloadbarplottest","Download plot"),downloadButton('downloaddatabarplottest', 'Download raw data'),align="center")
                                                                )
                                                              )
@@ -412,15 +413,22 @@ shinyUI(fluidPage(
                                               column(6,
                                                      h5(" 2D View (PC1 vs PC2)"),
                                                      plotlyOutput("pca_plot_2d_stats", height = "450px") %>% 
+                                                       withSpinner(color = "#0dc5c1", type = 1),
+                                                     br(),
+                                                     downloadButton("downloadplotPCA2D") %>% 
                                                        withSpinner(color = "#0dc5c1", type = 1)
                                               ),
                                               column(6,
                                                      h5("3D  view (PC1 vs PC2 vs PC3)"),
                                                      plotlyOutput("pca_plot_3d_stats", height = "450px") %>% 
+                                                       withSpinner(color = "#0dc5c1", type = 1),
+                                                     br(),
+                                                     downloadButton("downloadplotPCA3D") %>% 
                                                        withSpinner(color = "#0dc5c1", type = 1)
                                               )
                                             ),
                                             
+                                            br(nrow = 2),
                                             p(downloadButton("download_pca_combined", "Download images"), align = "center")
                                    ),
                                    # tabPanel("PCA Visualization", icon = icon("chart-area"),
@@ -852,7 +860,11 @@ shinyUI(fluidPage(
                                                                                  downloadButton('downloaddatadecouvroc', 'Download raw data'),align="center")
                                                                         ),
                                                                         column(6,
-                                                                               plotOutput("tabmodeldecouv", height = "400px")
+                                                                               plotOutput("tabmodeldecouv", height = "400px")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                                               
+                                                                               p(downloadButton("downloadtabmodeldecouv","Download plot"),
+                                                                                    #downloadButton('downloaddatatabmodeldecouv', 'Download raw data'),
+                                                                                 align="center")
                                                                                
                                                                                # plotOutput("plotmodeldecouvbp")%>% withSpinner(color="#0dc5c1",type = 1),
                                                                                # p(downloadButton("downloadplotmodeldecouvbp","Download plot"),
@@ -861,13 +873,16 @@ shinyUI(fluidPage(
                                                                         #column(),
                                                                         fluidRow(
                                                                           column(
-                                                                            width = 7,
+                                                                            width = 5
+                                                                          ),
+                                                                          column(
+                                                                            width = 3,
                                                                             conditionalPanel(condition="input.plotscoremodel=='points'",
                                                                                              checkboxInput("shownames1","show indivuals names",value=FALSE)
                                                                             ),
                                                                             br(),
                                                                             
-                                                                            h4("Métriques Moyennes"),
+                                                                            h4("Average Metrics"),
                                                                             tableOutput("average_metrics_decouv")
                                                                             # ,
                                                                             # 
@@ -876,9 +891,9 @@ shinyUI(fluidPage(
                                                                             #   "Specificity = ",textOutput("specificitydecouv",inline=T) #,
                                                                             #   conditionalPanel(
                                                                             #             condition = "output.fileUploaded",
-                                                                            #             h4("Métriques Détaillées par Classe"),
+                                                                            #             h4("Detailed Metrics by Class"),
                                                                             #             tableOutput("detailed_metrics_decouv"),
-                                                                            #             h4("Métriques Moyennes"),
+                                                                            #             h4("Average Metrics"),
                                                                             #             tableOutput("average_metrics_decouv")
                                                                             # )
                                                                             # br(),hr(),br(),
@@ -887,8 +902,9 @@ shinyUI(fluidPage(
                                                                             
                                                                           ),
                                                                           column(
-                                                                            5,
-                                                                            h4("Métriques Détaillées par Classe"),
+                                                                            4,
+                                                                            br(),
+                                                                            h4("Detailed Metrics by Class"),
                                                                             tableOutput("detailed_metrics_decouv"),
                                                                           )
                                                                         )
@@ -908,15 +924,19 @@ shinyUI(fluidPage(
                                                                                                   downloadButton('downloaddatavalroc', 'Download raw data'),align="center")
                                                                                          ),
                                                                                          column(6,
-                                                                                                plotOutput("tabmodelval", height = "400px")
+                                                                                                plotOutput("tabmodelval", height = "400px"),
+                                                                                                p(downloadButton("downloadtabmodelval","Download plot"),
+                                                                                                  #downloadButton('downloaddatatabmodeldecouv', 'Download raw data'),
+                                                                                                  align="center")
                                                                                                 
                                                                                                 ),
                                                                                          # column(),
                                                                                          fluidRow(
-                                                                                           column(7,
+                                                                                           column(width = 5),
+                                                                                           column(3,
                                                                                                   
                                                                                                   #conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames2","show indivuals names",value=FALSE)),
-                                                                                                  h4("Métriques Moyennes"),
+                                                                                                  h4("Average Metrics"),
                                                                                                   tableOutput("average_metrics_val")
                                                                                                   # ,
                                                                                                   # "Sensibility = ",textOutput("sensibilityval",inline=T), 
@@ -930,8 +950,8 @@ shinyUI(fluidPage(
                                                                                                   
                                                                                                   ),
                                                                                            column(
-                                                                                             width = 5,
-                                                                                             h4("Métriques Détaillées par Classe"),
+                                                                                             width =  4,
+                                                                                             h4("Detailed Metrics by Class"),
                                                                                              tableOutput("detailed_metrics_val"),
                                                                                            )
                                                                                          )

@@ -1546,18 +1546,31 @@ output$downloaddatalearning <- downloadHandler(
 output$downloadplotdecouvroc = downloadHandler(
   filename = function() {paste('graph','.',input$paramdownplot, sep='')},
   content = function(file) {
-    ggsave(file, plot =  ROCcurve(validation = datalearningmodel$reslearningmodel$classlearning,
-                                  decisionvalues =  datalearningmodel$reslearningmodel$scorelearning),  device = input$paramdownplot)},
+    req( MODEL()$DATAVALIDATIONMODEL$resvalidationmodel)
+    actual =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+    scores =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel) - 1)]
+    scores =  as.matrix(scores)
+    ggsave(file, plot =  ROCcurve(validation = actual,
+                                  decisionvalues = scores ), 
+           
+           device = input$paramdownplot)},
   contentType=NA)
 
 # Download data ROC learning
 output$downloaddatadecouvroc <- downloadHandler(
   filename = function() { paste('roc_data_learning.', input$paramdowntable, sep='') },
   content = function(file) {
+    
+    req( MODEL()$DATAVALIDATIONMODEL$resvalidationmodel)
+    actual =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+    scores =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel) - 1)]
+    scores =  as.matrix(scores)
+                        
     roc_data <- ROCcurve(
-      validation = MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,
-      decisionvalues = MODEL()$DATALEARNINGMODEL$reslearningmodel[,2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel)-1)],
-      graph = FALSE
+       validation = actual,
+      decisionvalues = scores,
+      graph = FALSE,
+      ggplot = FALSE
     )
     downloaddataset(roc_data, file)
   })
@@ -1594,6 +1607,52 @@ output$tabmodeldecouv <- renderPlot({
     graph = TRUE
   )
 })
+
+
+output$downloadtabmodeldecouv = downloadHandler(
+  filename = function(){
+    paste("confusion matrix trainning",".", input$paramdownplot,  sep = "")
+  },
+  content = function(file){
+    req(MODEL()$DATALEARNINGMODEL)
+    datalearningmodel <- MODEL()$DATALEARNINGMODEL
+    
+    ggsave(filename = file , 
+           plot = confusion_matrix_multiclass(
+                     predicted = datalearningmodel$reslearningmodel$predictclasslearning,
+                     actual = datalearningmodel$reslearningmodel$classlearning,
+                     normalize = FALSE,
+                     graph = TRUE
+                   ),  device = input$paramdownplot
+             )
+})
+
+
+output$downloadtabmodelval =  downloadHandler(
+  filename = function(){
+    paste("confusion matrix of validation", ".", input$paramdownplot, sep = "")
+  },
+  content = function(file){
+    
+    req(MODEL()$DATAVALIDATIONMODEL)
+    datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+    
+    ggsave(filename = file , 
+           plot = confusion_matrix_multiclass(
+             predicted = datavalidationmodel$resvalidationmodel$predictclassval,
+             actual = datavalidationmodel$resvalidationmodel$classval,
+             normalize = FALSE,
+             graph = TRUE
+           ),  device = input$paramdownplot
+    )
+  }
+)
+
+# output$downloaddatatabmodeldecouv  =  downloadHandler(
+#   filename = function(){
+#     paste('dataset of confusion matrix training',input$paramdowntable,  sep = "")
+#   }
+# )
 
 
 # Learning - Métriques
@@ -1837,12 +1896,12 @@ output$detailed_metrics_val <- renderTable({
       scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel[2:(ncol(model_result$DATAVALIDATIONMODEL$resvalidationmodel)-1)]
       
       scores =  as.matrix(scores)
-      # Calculer les métriques
+
       metrics <- compute_multiclass_metrics(predicted, actual)
       classes <- levels(actual)
       n_classes <- length(classes)
       
-      # Calculer les AUC par classe si possible
+
       auc_per_class <- rep(NA, n_classes)
       if(is.matrix(scores)) {
         auc_results <- compute_multiclass_auc(actual, scores)
@@ -1855,7 +1914,6 @@ output$detailed_metrics_val <- renderTable({
         }
       }
       
-      # Créer le tableau
       result_df <- data.frame(
         Class = classes,
         # Precision = round(metrics$precision_per_class, 3),
@@ -1892,6 +1950,7 @@ output$average_metrics_val <- renderTable({
       actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
       scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(model_result$DATAVALIDATIONMODEL$resvalidationmodel)-1)]
       
+      scores =  as.matrix(scores)
       # Calculer les métriques de base
       metrics <- compute_multiclass_metrics(predicted, actual)
       
@@ -2059,10 +2118,17 @@ output$downloadplotvalroc = downloadHandler(
 output$downloaddatavalroc <- downloadHandler(
   filename = function() { paste('roc_data_validation.', input$paramdowntable, sep='') },
   content = function(file) {
+    req( MODEL()$DATAVALIDATIONMODEL$resvalidationmodel)
+    actual =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+    scores =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel) - 1)]
+    scores =  as.matrix(scores)
+    
+    
     roc_data <- ROCcurve(
-      validation = MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,
-      decisionvalues = MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval,
-      graph = FALSE
+      validation = actual,
+      decisionvalues = scores,
+      graph = FALSE,
+      ggplot = FALSE
     )
     downloaddataset(roc_data, file)
   }
@@ -3204,13 +3270,6 @@ output$download_pca_variance <- downloadHandler(
 )
 
 
-# ============================================================================
-# Section PCA Visualization (Option 2 - Dans l'onglet Statistics)
-# ============================================================================
-
-# Si vous choisissez d'ajouter les visualisations dans l'onglet Statistics
-# Utilisez ces outputs à la place :
-
 output$pca_plot_2d_stats <- renderPlotly({
   # Utiliser les données différentiellement exprimées si disponibles
   if(input$test != "notest") {
@@ -3258,13 +3317,52 @@ output$pca_plot_3d_stats <- renderPlotly({
 })
 
 
+output$downloadplotPCA2D = downloadHandler(
+  filename = function(){
+    # paste("PCA 2D", ".", input$paramdownplot,  sep ="")
+    paste("PCA 2D.html")
+  },
+    content = function(file){
+      req(TEST()$LEARNINGDIFF)
+      data <- TEST()$LEARNINGDIFF
+      req(data)
+      
+      y <- data[, 1]
+      X <- data[, -1, drop = FALSE]
+      
+      if(ncol(X) >= 2) {
+        #p2d <- PlotPca2D_interactive(data = X, y = y)
+        # ggsave(filename = file , 
+        #        plot =  PlotPca2D_interactive(data = X, y = y),
+        #        device = input$paramdownplot
+        # )
+        htmlwidgets::saveWidget(as_widget(PlotPca2D_interactive(data = X, y = y)), file = file )
+      }
+    }
+)
+
+output$downloadplotPCA3D = downloadHandler(
+  filename = function(file){
+    paste("PCA 3D.html")
+  }, 
+  content = function(file){
+    req(TEST()$LEARNINGDIFF)
+    data <- TEST()$LEARNINGDIFF
+    req(data)
+    
+    y <- data[, 1]
+    X <- data[, -1, drop = FALSE]
+    p3d <- PlotPca3D_interactive(data = X, y = y)
+    htmlwidgets::saveWidget(as_widget(p3d), file = file )
+  }
+)
+
 output$download_pca_combined <- downloadHandler(
   filename = function() {
     paste('pca_visualizations_', Sys.Date(), '.zip', sep='')
   },
   content = function(file) {
-    # Créer un répertoire temporaire
-    tmpdir <- tempdir()
+    tmpdir <- getwd()
     
     data <- TEST()$LEARNINGDIFF
     req(data)
@@ -3272,22 +3370,17 @@ output$download_pca_combined <- downloadHandler(
     y <- data[, 1]
     X <- data[, -1, drop = FALSE]
     
-    # Sauvegarder les deux graphiques
     if(ncol(X) >= 2) {
       p2d <- PlotPca2D_interactive(data = X, y = y)
-      htmlwidgets::saveWidget(as_widget(p2d), 
-                              file.path(tmpdir, "pca_2d.html"))
+      htmlwidgets::saveWidget(as_widget(p2d), "pca_2d.html")
     }
     
     if(ncol(X) >= 3) {
       p3d <- PlotPca3D_interactive(data = X, y = y)
-      htmlwidgets::saveWidget(as_widget(p3d), 
-                              file.path(tmpdir, "pca_3d.html"))
+      htmlwidgets::saveWidget(as_widget(p3d), "pca_3d.html")
     }
     
-    # Créer un fichier zip
-    zip(file, files = list.files(tmpdir, pattern = "pca_.*\\.html$", 
-                                 full.names = TRUE))
+    zip(file, files = list.files(tmpdir, pattern = "pca_.*\\.html$",  full.names = TRUE))
   }
 )
 

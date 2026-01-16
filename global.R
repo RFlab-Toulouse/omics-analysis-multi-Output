@@ -2455,7 +2455,9 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         model$kernel <- kernel_param
         
         # Obtenir les probabilités
-        pred_with_prob <- e1071:::predict.svm(model, learningmodel, probability = TRUE)
+        pred_with_prob <- e1071:::predict.svm(model, learningmodel[,-1], probability = TRUE)
+        cat("section ajustement du modèle svm : affichage des predictions , \n")
+        print(pred_with_prob)
         scorelearning <- attr(pred_with_prob, "probabilities")
         
         # Réorganiser les colonnes pour correspondre à l'ordre de lev
@@ -3564,56 +3566,56 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
   # cat("affichage de la tete des proba dans roccurve : \n")
   # print(head(decisionvalues))
   # Pour la classification binaire, garder le comportement original
-  if(n_classes == 2 && !is.matrix(decisionvalues)) {
-    res <- roc(validation, decisionvalues, quiet = TRUE)
-    auc_value <- as.numeric(auc(res))
-    
-    if(!graph) {
-      df <- data.frame(sensitivities = res$sensitivities, 
-                       specificities = res$specificities)
-      return(df)
-    }
-    
-    if(ggplot) {
-      col <- gg_color_hue(2)
-      bin <- 0.01
-      diag <- data.frame(x = seq(0, 1, by = bin), y = rev(seq(0, 1, by = bin)))
-      df <- data.frame(
-        sensitivities = res$sensitivities,
-        specificities = res$specificities
-      )
-      
-      p <- ggplot() +
-        geom_line(data = diag, aes(x = x, y = y), color = col[2], linetype = "dashed") +
-        geom_line(data = df, aes(x = 1 - specificities, y = sensitivities), 
-                  color = col[1], size = 1) +
-        labs(
-          title = paste0(maintitle, " (AUC = ", round(auc_value, 3), ")"),
-          x = "1 - Specificity (False Positive Rate)",
-          y = "Sensitivity (True Positive Rate)"
-        ) +
-        theme_minimal() +
-        theme(
-          plot.title = element_text(size = 15, face = "bold"),
-          axis.text = element_text(size = 12),
-          axis.title = element_text(size = 14, face = "bold"),
-          legend.position = c(0.8, 0.2),
-          axis.text.x = element_text(size = 12 ,  face = 'bold' ) ,
-          axis.text.y =  element_text(size = 12 , face =  'bold'),
-          axis.title.x = element_text(size = 15 , face = 'bold'), 
-          axis.title.y =  element_text(size = 15 , face = 'bold')
-        ) +
-        coord_fixed()
-      
-      return(p)
-    }
-  }
+  # if(n_classes == 2 && !is.matrix(decisionvalues)) {
+  #   res <- roc(validation, decisionvalues, quiet = TRUE)
+  #   auc_value <- as.numeric(auc(res))
+  #   
+  #   if(!graph) {
+  #     df <- data.frame(sensitivities = res$sensitivities, 
+  #                      specificities = res$specificities)
+  #     return(df)
+  #   }
+  #   
+  #   if(ggplot) {
+  #     col <- gg_color_hue(2)
+  #     bin <- 0.01
+  #     diag <- data.frame(x = seq(0, 1, by = bin), y = rev(seq(0, 1, by = bin)))
+  #     df <- data.frame(
+  #       sensitivities = res$sensitivities,
+  #       specificities = res$specificities
+  #     )
+  #     
+  #     p <- ggplot() +
+  #       geom_line(data = diag, aes(x = x, y = y), color = col[2], linetype = "dashed") +
+  #       geom_line(data = df, aes(x = 1 - specificities, y = sensitivities), 
+  #                 color = col[1], size = 1) +
+  #       labs(
+  #         title = paste0(maintitle, " (AUC = ", round(auc_value, 3), ")"),
+  #         x = "1 - Specificity (False Positive Rate)",
+  #         y = "Sensitivity (True Positive Rate)"
+  #       ) +
+  #       theme_minimal() +
+  #       theme(
+  #         plot.title = element_text(size = 15, face = "bold"),
+  #         axis.text = element_text(size = 12),
+  #         axis.title = element_text(size = 14, face = "bold"),
+  #         legend.position = c(0.8, 0.2),
+  #         axis.text.x = element_text(size = 12 ,  face = 'bold' ) ,
+  #         axis.text.y =  element_text(size = 12 , face =  'bold'),
+  #         axis.title.x = element_text(size = 15 , face = 'bold'), 
+  #         axis.title.y =  element_text(size = 15 , face = 'bold')
+  #       ) +
+  #       coord_fixed()
+  #     
+  #     return(p)
+  #   }
+  # }
   
   # Pour la classification multi-classe
   if(!is.matrix(decisionvalues)){
-    if(!graph){
-      return(data.frame(message="Multi-class ROC requires probability matrix"))
-    }
+    # if(!graph){
+    #   return(data.frame(message="Multi-class ROC requires probability matrix"))
+    # }
     if(ggplot){
       p <- ggplot() +
         annotate("text", x=0.5, y=0.5, 
@@ -3635,12 +3637,12 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
     # Créer un indicateur binaire pour cette classe
     binary_response <- ifelse(as.numeric(validation) == (n_classes - i + 1), 1, 0)
     
-    # Obtenir les probabilités pour cette classe
-    class_probs <- decisionvalues[, i]
+    # Obtenir les valeurs de décision pour cette classe
+    class_scores <- decisionvalues[, i]
     
     # Calculer la ROC
     roc_obj <- tryCatch({
-      roc(binary_response, class_probs, quiet=TRUE)
+      roc(binary_response, class_scores, quiet=TRUE)
     }, error = function(e){
       return(NULL)
     })
@@ -3655,8 +3657,13 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
         FPR = 1 - roc_obj$specificities,
         TPR = roc_obj$sensitivities,
         Class = class_name,
-        AUC = auc_values[i]
+        AUC = auc_values[i],
+        ClassNum = i
       )
+      
+      # CORRECTION CRITIQUE : Trier par FPR pour assurer la monotonicité
+      temp_df <- temp_df[order(temp_df$FPR, temp_df$TPR), ]
+      
       roc_data <- rbind(roc_data, temp_df)
     }
   }
@@ -3664,13 +3671,13 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
   # Calculer l'AUC moyenne (macro-average)
   mean_auc <- mean(auc_values, na.rm=TRUE)
   
-  if(!graph){
-    return(data.frame(
-      class = names(roc_list),
-      auc = auc_values,
-      mean_auc = mean_auc
-    ))
-  }
+  # if(!graph){
+  #   return(data.frame(
+  #     class = names(roc_list),
+  #     auc = auc_values,
+  #     mean_auc = mean_auc
+  #   ))
+  # }
      
     
   if(ggplot){
@@ -3686,15 +3693,11 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
                                    round(roc_data$AUC, 3), ")")
     
     p <- ggplot() +
-      geom_line(data = diag, aes(x = x, y = y), 
-                color = "gray50", linetype = "dashed", size = 0.8) +
-      # geom_line(data = roc_data, 
-      #           aes(x = FPR, y = TPR, color = Class_Label), 
-      #           size = 1.2) +
-      geom_step(data = roc_data, 
-                aes(x = FPR, y = TPR, color = Class_Label), 
-                direction = "vh", 
-                size = 1.2)+ 
+      geom_line(data = roc_data, 
+                aes(x = FPR, y = TPR, color = Class_Label),
+                linewidth = 1.5) +
+       geom_line(data = diag, aes(x = x, y = y), 
+                 color = "gray50", linetype = "dashed", size = 0.8) +
       labs(
         title = paste0(maintitle, " (Mean AUC = ", round(mean_auc, 3), ")"),
         x = "1 - Specificity",
@@ -3707,8 +3710,9 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
         axis.text = element_text(size = 12),
         axis.title = element_text(size = 14, face = "bold"),
         legend.position = c(0.8, 0.2),
-        legend.title = element_text(size = 12, face = "bold"),
-        legend.text = element_text(size = 10, face = "bold"),
+        legend.title = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 12, face = "bold"),
+        panel.background = element_rect(fill = "#F8F9FA",color =  "white"),
         panel.grid.minor = element_blank(),
         axis.text.x = element_text(size = 12 ,  face = 'bold' ) ,
         axis.text.y =  element_text(size = 12 , face =  'bold'),
@@ -3719,6 +3723,8 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
       scale_color_manual(values = col[1:n_classes])
     
     return(p)
+  }else{
+    roc_data
   }
 }
 
@@ -4377,7 +4383,11 @@ importanceplot<-function(model,learningmodel,modeltype,graph=T){
     p <- ggplot(var_importance, aes(x=variables, weight=importance, fill=variables))
     g <- p + geom_bar() + coord_flip() + 
       ylab("Variable Importance (Mean Decrease in Gini Index)") +
-      theme(legend.position="none", plot.title=element_text(size=15)) +
+      theme(legend.position="none",
+            plot.title=element_text(size=15),
+            axis.text.x = element_text(size = 10, face = 'bold'),
+            axis.text.y = element_text(size = 10, face = 'bold')
+            ) +
       ggtitle("Importance of variables in the model") +
       scale_fill_grey()
   }
@@ -4397,7 +4407,11 @@ importanceplot<-function(model,learningmodel,modeltype,graph=T){
     
     p <- ggplot(var_importance, aes(x=variables, weight=importance, fill=variables))
     g <- p + geom_bar() + coord_flip() + ylab("Variable Importance (fscore)") +
-      theme(legend.position="none", plot.title=element_text(size=15)) +
+      theme(legend.position="none",
+            plot.title=element_text(size=15),
+            axis.text.x = element_text(size = 10, face = 'bold'),
+            axis.text.y = element_text(size = 10, face = 'bold')
+            ) +
       ggtitle("Importance of variables in the model") +
       scale_fill_grey()
   }
@@ -4438,7 +4452,11 @@ importanceplot<-function(model,learningmodel,modeltype,graph=T){
       p <- ggplot(var_importance, aes(x=variables, weight=importance, fill=variables))
       g <- p + geom_bar() + coord_flip() + 
         ylab("Variable Importance (Absolute Coefficient)") +
-        theme(legend.position="none", plot.title=element_text(size=15)) +
+        theme(legend.position="none", 
+              plot.title=element_text(size=15),
+              axis.text.x = element_text(size = 10, face = 'bold'),
+              axis.text.y = element_text(size = 10, face = 'bold')
+              ) +
         ggtitle("Importance of variables in the model") +
         scale_fill_grey()
     } else {
@@ -4463,7 +4481,9 @@ importanceplot<-function(model,learningmodel,modeltype,graph=T){
       
       p <- ggplot(var_importance, aes(x=variables, weight=importance, fill=variables))
       g <- p + geom_bar() + coord_flip() + ylab("Variable Importance (Gain)") +
-        theme(legend.position="none", plot.title=element_text(size=15)) +
+        theme(legend.position="none", plot.title=element_text(size=15),
+              axis.text.x = element_text(size = 10, face = 'bold'),
+              axis.text.y = element_text(size = 10, face = 'bold')) +
         ggtitle("Importance of variables in the model") +
         scale_fill_grey()
     } else {
@@ -4519,7 +4539,7 @@ positive<-function(x){
 }
 
 # Fonction pour créer une visualisation PCA 2D interactive avec plotly
-PlotPca2D_interactive <- function(data, y, title = "PCA 2D des variables sélectionnées") {
+PlotPca2D_interactive <- function(data, y, title = "2D PCA of selected variables") {
   # Effectuer la PCA
   pca_result <- prcomp(data, center = TRUE, scale. = TRUE)
   
@@ -4551,7 +4571,7 @@ PlotPca2D_interactive <- function(data, y, title = "PCA 2D des variables sélect
                    titlefont = list(size = 14, face = "bold")),
       yaxis = list(title = paste0("PC2 (", var_explained[2], "% variance)"),
                    titlefont = list(size = 14, face = "bold")),
-      legend = list(title = list(text = "Groupe"))
+      legend = list(title = list(text = "Group"))
     )
 }
 
@@ -4597,7 +4617,7 @@ PlotPca3D_interactive <- function(data, y, title = "PCA of selected variables") 
         yaxis = list(title = paste0("PC2 (", var_explained[2], "%)")),
         zaxis = list(title = paste0("PC3 (", var_explained[3], "%)"))
       ),
-      legend = list(title = list(text = "Groupe"))
+      legend = list(title = list(text = "Group"))
     )
 }
 
