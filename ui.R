@@ -306,7 +306,7 @@ shinyUI(fluidPage(
                                                                       numericInput("thresholdFC","Fold change threshold" , 0, min =0, max = 5, step = 0.5),
                                                                       conditionalPanel(condition ="input.help",helpText("Fold Change is the ratio of means between groups.")),
                                                                       numericInput("thresholdpv","p-value threshold" , 0.05, min =0, max = 1, step = 0.01),
-                                                                      checkboxInput("adjustpv", "adjust p-value " , value = FALSE),
+                                                                      checkboxInput("adjustpv", " " , value = FALSE),
                                                                       conditionalPanel(condition ="input.help", helpText("Benjamini & Hochberg correction"))
                                                      ),
                                                      conditionalPanel(condition ="input.test=='clustEnet'",
@@ -1033,7 +1033,8 @@ shinyUI(fluidPage(
                                                                                       # "Ridge" = "ridge"
                                                                                       ),
                                                                                    selected = "Kruskal"),
-                                                                checkboxGroupInput("adjustpvtest", "adjust p-value " , 
+                                                                checkboxGroupInput("adjustpvtest", " " , 
+                                                                                   #adjust p-value
                                                                                    choices = list("TRUE"=TRUE,"FALSE"=FALSE),
                                                                                    inline = TRUE,
                                                                                    selected = "FALSE")

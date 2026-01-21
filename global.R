@@ -2455,7 +2455,14 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         model$kernel <- kernel_param
         
         # Obtenir les probabilités
-        pred_with_prob <- e1071:::predict.svm(model, learningmodel[,-1], probability = TRUE)
+        tryCatch({
+          pred_with_prob <- e1071:::predict.svm(model, learningmodel[,-1], probability = TRUE)
+          
+        }, error =  function(e){
+          print(e$message)
+          pred_with_prob = data.frame()
+        } )  
+        validate(need(nrow(pred_with_prob)>0))
         cat("section ajustement du modèle svm : affichage des predictions , \n")
         print(pred_with_prob)
         scorelearning <- attr(pred_with_prob, "probabilities")
