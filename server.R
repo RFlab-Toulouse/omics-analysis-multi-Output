@@ -1783,6 +1783,59 @@ output$detailed_metrics_decouv <- renderTable({
   # })
 }, striped = TRUE, hover = TRUE, bordered = TRUE)
 
+output$download_detailed_metrics_decouv =  downloadHandler(
+  filename = function(){
+    paste("download detailed metrics train.", input$paramdowntable, sep = '')
+  }, 
+  content = function(file){
+    model_result <- MODEL()
+    if(!is.null(model_result$DATALEARNINGMODEL)) {
+      predicted <- model_result$DATALEARNINGMODEL$reslearningmodel$predictclasslearning
+      actual <- model_result$DATALEARNINGMODEL$reslearningmodel$classlearning
+      scores <- model_result$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(model_result$DATALEARNINGMODEL$reslearningmodel)-1)]
+      
+      scores =  as.matrix(scores)
+      cat("structiure of mscores in detaillled metrics decouverte : \n")
+      print(str(scores))
+      # Calculer les métriques
+      metrics <- compute_multiclass_metrics(predicted, actual)
+      classes <- levels(actual)
+      n_classes <- length(classes)
+      
+      # Calculer les AUC par classe si possible
+      auc_per_class <- rep(NA, n_classes)
+      if(is.matrix(scores)) {
+        auc_results <- compute_multiclass_auc(actual, scores)
+        auc_per_class <- auc_results$auc_per_class
+      } else if(is.list(scores) && length(scores) > 0) {
+        score_matrix <- scores[[1]]
+        if(is.matrix(score_matrix)) {
+          auc_results <- compute_multiclass_auc(actual, score_matrix)
+          auc_per_class <- auc_results$auc_per_class
+        }
+      }
+      
+      cat("AUC per class: \n")
+      print(auc_per_class)
+      res_metrics = print_multiclass_performance(predicted, actual, score_matrix = scores, set_name = "Training")
+      cat("specificity(predicted, actual)$specificity_per_class: \n")
+      print(specificity(predicted, actual)$per_class )
+      # Créer le tableau
+      result_df <- data.frame(
+        Class = classes,
+        # Precision = round(metrics$precision_per_class, 3),
+        sensitivity = round(metrics$recall_per_class, 3),
+        specificity =  specificity(predicted, actual)$per_class ,
+        # F1_Score = round(metrics$f1_per_class, 3),
+        AUC = round(auc_per_class, 3),
+        stringsAsFactors = FALSE
+      )
+      
+      downloaddataset(result_df, file = file)
+    }
+  }
+)
+
 # Learning - Métriques moyennes
 output$average_metrics_decouv <- renderTable({
   req(MODEL())
@@ -1855,6 +1908,86 @@ output$average_metrics_decouv <- renderTable({
     )
   })
 }, striped = TRUE, hover = TRUE, bordered = TRUE)
+
+output$download_average_metrics_decouv = downloadHandler(
+  filename = function(){
+    paste("download_average_metrics_decouv.", input$paramdowntable, sep = "")
+  },
+content = function(file){
+  
+  req(MODEL())
+  
+  tryCatch({
+    model_result <- MODEL()
+    
+    if(!is.null(model_result$DATALEARNINGMODEL)) {
+      predicted <- model_result$DATALEARNINGMODEL$reslearningmodel$predictclasslearning
+      actual <- model_result$DATALEARNINGMODEL$reslearningmodel$classlearning
+      scores <- model_result$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(model_result$DATALEARNINGMODEL$reslearningmodel)-1)]
+      
+      scores =  as.matrix(scores)
+      # Calculer les métriques de base
+      metrics <- compute_multiclass_metrics(predicted, actual)
+      
+      # Calculer l'AUC
+      n_classes <- length(levels(actual))
+      auc_value <- NA
+      
+      if(n_classes == 2) {
+        # Binaire : scores est un vecteur
+        if(!is.matrix(scores)) {
+          auc_value <- tryCatch({
+            as.numeric(auc(roc(actual, scores, quiet = TRUE)))
+          }, error = function(e) NA)
+        }
+      } else {
+        # Multi-classe : scores doit être une matrice
+        if(is.matrix(scores)) {
+          auc_results <- compute_multiclass_auc(actual, scores)
+          auc_value <- auc_results$auc_macro
+        } else if(is.list(scores) && length(scores) > 0) {
+          # Extraire la matrice si stockée dans une liste
+          score_matrix <- scores[[1]]
+          if(is.matrix(score_matrix)) {
+            auc_results <- compute_multiclass_auc(actual, score_matrix)
+            auc_value <- auc_results$auc_macro
+          }
+        }
+      }
+      
+      # Créer le tableau de résultats
+      result_df <- data.frame(
+        Metric = c(
+          "Accuracy",
+          "Sensitivity (macro)",
+          "Specificity (macro)",
+          # "Precision (macro)",
+          # "F1-Score (macro)",
+          "AUC (macro)"
+        ),
+        Value = c(
+          metrics$accuracy,
+          metrics$sensitivity,
+          metrics$specificity,
+          # metrics$precision_macro,
+          # metrics$f1_score,
+          ifelse(is.na(auc_value), "-", round(auc_value, 3))
+        ),
+        stringsAsFactors = FALSE
+      )
+      
+      result_df
+    }
+  }, error = function(e) {
+    result_df = data.frame(
+      Metric = "Error",
+      Value = e$message
+    )
+  })
+  
+  downloaddataset(result_df, file = file)
+}
+)
 
 # Download métriques détaillées learning
 output$downloaddetailedmetricsdecouv <- downloadHandler(
@@ -1938,6 +2071,67 @@ output$detailed_metrics_val <- renderTable({
   })
 }, striped = TRUE, hover = TRUE, bordered = TRUE)
 
+output$download_detailed_metrics_val =  downloadHandler(
+  filename = function(){
+    paste("download_detailed_metrics_val.", input$paramdowntable, sep = "")
+  },
+  content = function(file){
+    
+    req(MODEL())
+    
+    tryCatch({
+      model_result <- MODEL()
+      
+      if(!is.null(model_result$DATAVALIDATIONMODEL)) {
+        predicted <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval
+        actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
+        scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel[2:(ncol(model_result$DATAVALIDATIONMODEL$resvalidationmodel)-1)]
+        
+        scores =  as.matrix(scores)
+        
+        metrics <- compute_multiclass_metrics(predicted, actual)
+        classes <- levels(actual)
+        n_classes <- length(classes)
+        
+        
+        auc_per_class <- rep(NA, n_classes)
+        if(is.matrix(scores)) {
+          auc_results <- compute_multiclass_auc(actual, scores)
+          auc_per_class <- auc_results$auc_per_class
+        } else if(is.list(scores) && length(scores) > 0) {
+          score_matrix <- scores[[1]]
+          if(is.matrix(score_matrix)) {
+            auc_results <- compute_multiclass_auc(actual, score_matrix)
+            auc_per_class <- auc_results$auc_per_class
+          }
+        }
+        
+        result_df <- data.frame(
+          Class = classes,
+          # Precision = round(metrics$precision_per_class, 3),
+          sensitivity = round(metrics$recall_per_class, 3),
+          specificity =  round(specificity(predicted, actual)$per_class , 3),
+          # F1_Score = round(metrics$f1_per_class, 3),
+          AUC = round(auc_per_class, 3),
+          stringsAsFactors = FALSE
+        )
+        
+        # result_df
+      }
+    }, error = function(e) {
+      result_df = data.frame(
+        Class = "Error",
+        Precision = e$message,
+        specificity = "",
+        sensitivity = "",
+        #F1_Score = "",
+        AUC = ""
+      )
+    })
+    downloaddataset(result_df ,file = file)
+  }
+)
+
 # Validation - Métriques moyennes
 output$average_metrics_val <- renderTable({
   req(MODEL())
@@ -2007,6 +2201,82 @@ output$average_metrics_val <- renderTable({
     )
   })
 },  striped = TRUE, hover = TRUE, bordered = TRUE)
+
+output$download_average_metrics_val =  downloadHandler(
+  filename = function(){
+    paste("download_average_metrics_val.", input$paramdowntable, sep = "")
+  }, content = function(file){
+    
+    req(MODEL())
+    
+    tryCatch({
+      model_result <- MODEL()
+      # MODEL()$DATAVALIDATIONMODEL
+      if(!is.null(model_result$DATAVALIDATIONMODEL)) {
+        predicted <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval
+        actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
+        scores <- model_result$DATAVALIDATIONMODEL$resvalidationmodel[, 2:(ncol(model_result$DATAVALIDATIONMODEL$resvalidationmodel)-1)]
+        
+        scores =  as.matrix(scores)
+        # Calculer les métriques de base
+        metrics <- compute_multiclass_metrics(predicted, actual)
+        
+        # Calculer l'AUC
+        n_classes <- length(levels(actual))
+        auc_value <- NA
+        
+        if(n_classes == 2) {
+          if(!is.matrix(scores)) {
+            auc_value <- tryCatch({
+              as.numeric(auc(roc(actual, scores, quiet = TRUE)))
+            }, error = function(e) NA)
+          }
+        } else {
+          if(is.matrix(scores)) {
+            auc_results <- compute_multiclass_auc(actual, scores)
+            auc_value <- auc_results$auc_macro
+          } else if(is.list(scores) && length(scores) > 0) {
+            score_matrix <- scores[[1]]
+            if(is.matrix(score_matrix)) {
+              auc_results <- compute_multiclass_auc(actual, score_matrix)
+              auc_value <- auc_results$auc_macro
+            }
+          }
+        }
+        
+        # Créer le tableau de résultats
+        result_df <- data.frame(
+          Metric = c(
+            "Accuracy",
+            "Sensitivity (macro)",
+            "Specificity (macro)",
+            # "Precision (macro)",
+            # "F1-Score (macro)",
+            "AUC (macro)"
+          ),
+          Value = c(
+            metrics$accuracy,
+            metrics$sensitivity,
+            metrics$specificity,
+            # metrics$precision_macro,
+            # metrics$f1_score,
+            ifelse(is.na(auc_value), "-", round(auc_value, 3))
+          ),
+          stringsAsFactors = FALSE
+        )
+        
+        result_df
+      }
+    }, error = function(e) {
+      result_df = data.frame(
+        Metric = "Error",
+        Value = e$message
+      )
+    })
+    
+    downloaddataset(result_df, file = file)
+  }
+)
 
 # Download métriques détaillées validation
 output$downloaddetailedmetricsval <- downloadHandler(
@@ -2262,7 +2532,7 @@ output$downloadplotdecouvroc <- downloadHandler(
 output$accuracydecouv <- renderText({
   datalearningmodel <- MODEL()$DATALEARNINGMODEL
   predicted <- datalearningmodel$reslearningmodel$predictclasslearning
-  actual <- datalearningmodel$reslearningmodel$classlearning
+  actual <- datalearningmodel$reslearningmodel$cla0sslearning
   accuracy <- sum(predicted == actual) / length(actual)
   round(accuracy, 3)
 })

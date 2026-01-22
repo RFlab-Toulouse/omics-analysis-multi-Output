@@ -46,7 +46,10 @@ importfile<-function (datapath,extension,NAstring="NA",sheet=1,skiplines=0,dec="
   # datapath: path of the file
   #extention: extention of the file : csv, xls, ou xlsx
   if(extension=="csv"){
-    toto <<- read.csv2(datapath,header = F,sep =sep,dec=dec,na.strings = NAstring,stringsAsFactors = F,row.names=NULL,check.names = F )
+    toto <<- read.csv2(datapath,header = F,
+                       sep =sep,dec=dec,
+                       na.strings = NAstring,
+                       stringsAsFactors = F,row.names=NULL,check.names = F )
   }
   if(extension=="xlsx"){
     options(warn=-1)
@@ -2373,6 +2376,8 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         # print(head(scorelearning))
         # Prédiction = classe avec la probabilité maximale
         predictclasslearning <- randomForest:::predict.randomForest(model, learningmodel)
+        predictclasslearning <- model$predicted
+        print(model$confusion[, -end(colnames(model$confusion))[1]])
         predictclasslearning <- as.factor(predictclasslearning)
         cat("affchage de la prediction \n")
         print(head(predictclasslearning) )
