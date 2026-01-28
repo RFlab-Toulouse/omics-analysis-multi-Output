@@ -513,6 +513,7 @@ histplot<-function(toto,graph=T){
        annotate("text",x=Inf,y=Inf,label=paste(nrow(data),"values"),size=6,vjust=2,hjust=1.5)
   }
 }
+
 datahistogram<-function(data,nbclass){
   dh<-hist(data[,1],nclass=nbclass,plot=F)
   minclass<-dh$breaks[-(length(dh$breaks))]
@@ -575,6 +576,7 @@ replaceNA<-function(toto,rempNA="z",pos=F,NAstructure=F,thresholdstruct=0.05,max
   
   return(toto)
 }
+
 mdsplot<-function(toto,ggplot=T,maintitle="MDS representation of the individuals",graph=T){
   class<-toto[,1]
   toto<-toto[-1]
@@ -3955,6 +3957,7 @@ importancemodelsvm<-function(model,modeltype,tabdiff,criterion){
   }
   return(importancevar)
 }
+
 Fscore<-function(tab,class){
   tabpos<-as.data.frame(tab[which(class==levels(class)[1]),])
   npos<-nrow(tabpos)
