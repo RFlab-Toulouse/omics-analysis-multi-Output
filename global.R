@@ -2406,7 +2406,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         
         cost_param <- tune_result$best.parameters$cost
         gamma_param <- tune_result$best.parameters$gamma
-        kernel_param <- "radial"
+        kernel_model <- "radial"
         
         cat("  Best cost:", cost_param, "\n")
         cat("  Best gamma:", gamma_param, "\n")
@@ -2414,12 +2414,12 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         # Manual mode
         cost_param <- if(!is.null(modelparameters$cost)) modelparameters$cost else 1
         gamma_param <- if(!is.null(modelparameters$gamma)) modelparameters$gamma else 0.1
-        kernel_param <- if(!is.null(modelparameters$kernel)) modelparameters$kernel else "radial"
+        kernel_model <- if(!is.null(modelparameters$kernel)) modelparameters$kernel else "radial"
         
         cat("  Using manual parameters:\n")
         cat("  Cost:", cost_param, "\n")
         cat("  Gamma:", gamma_param, "\n")
-        cat("  Kernel:", kernel_param, "\n")
+        cat("  Kernel:", kernel_model, "\n")
       }
       
       # Train model
@@ -2427,14 +2427,14 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         # Classification binaire - sans probabilités
         model <- svm(x = learningmodel[,-1], 
                      y = learningmodel[,1],
-                     kernel = kernel_param, 
+                     kernel = "radial", # kernel_model, 
                      cost = cost_param, 
                      gamma = gamma_param,
                      probability = FALSE)
         
         model$cost <- cost_param
         model$gamma <- gamma_param
-        model$kernel <- kernel_param
+        # model$kernel <- kernel_model
         
         scorelearning <- data.frame(as.vector(model$decision.values))
         colnames(scorelearning) <- paste(lev[1],"/",lev[2],sep="")
@@ -2448,7 +2448,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         model <- svm( #group ~ ., data = learningmodel,
                       x = learningmodel[,-1], 
                       y = learningmodel[,1],
-                     kernel = kernel_param, 
+                     kernel = kernel_model, 
                      cost = cost_param, 
                      gamma = gamma_param,
                      scale = FALSE,
@@ -2459,17 +2459,17 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         
         model$cost <- cost_param
         model$gamma <- gamma_param
-        model$kernel <- kernel_param
+        # model$kernel <- kernel_model
         
         # Obtenir les probabilités
-        tryCatch({
+        # tryCatch({
           pred_with_prob <- e1071:::predict.svm(model, learningmodel[,-1], probability = TRUE)
           
-        }, error =  function(e){
-          print(e$message)
-          pred_with_prob = data.frame()
-        } )  
-        validate(need(nrow(pred_with_prob)>0))
+        # }, error =  function(e){
+        #   print(e$message)
+        #   pred_with_prob = data.frame()
+        # } )  
+        #validate(need(nrow(pred_with_prob)>0, "Erreur: Le modèle SVM n'a pas pu générer de prédictions. Vérifiez vos données et paramètres."))
         cat("section ajustement du modèle svm : affichage des predictions , \n")
         print(pred_with_prob)
         scorelearning <- attr(pred_with_prob, "probabilities")
@@ -3351,7 +3351,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
           predictclassval[which(scoreval >= modelparameters$thresholdmodel)] <- lev["positif"]
           predictclassval[which(scoreval < modelparameters$thresholdmodel)] <- lev["negatif"]
         } else {
-          pred_with_prob <- e1071:::predict.svm(model, validationmodel, probability=TRUE)
+          pred_with_prob <- e1071:::predict.svm(model, validationmodel[,-1], probability=TRUE)
           scoreval <- attr(pred_with_prob, "probabilities")
           if(!is.null(colnames(scoreval))) {
             col_order <- match(lev, colnames(scoreval))

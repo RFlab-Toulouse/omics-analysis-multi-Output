@@ -1233,6 +1233,7 @@ MODEL<-reactive({
   cost_model <- NULL
   gamma_model <- NULL
   kernel_model <- NULL
+  kernel_param <- NULL
   autotunexgb_param <- TRUE
   nrounds_model <- NULL
   maxdepth_model <- NULL
