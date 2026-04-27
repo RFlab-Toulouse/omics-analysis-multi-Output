@@ -149,7 +149,8 @@ shinyUI(fluidPage(
     
     mainPanel(
       conditionalPanel(condition ="!output.fileUploaded & !output.modelUploaded",
-                       h3("The purpose of this application is to provide a user-friendly tool to build a prediction model from omics datas.",
+                       h3("The aim of this application is to provide a user-friendly tool for creating a model to 
+                          predict glomerular filtration rate (GFR) based on omics data.",
                           align="center"),
                        h4("Check the box 'show help' for any further informations."),br(),br(),br(),
                        
@@ -288,7 +289,8 @@ shinyUI(fluidPage(
                                                                     # "Clustering + ElasticNet (multivariate)" = "clustEnet",
                                                                     "Anova Test" = "ANOVA",
                                                                     "Lasso (multivariate)" = "lasso",
-                                                                    "ElasticNet (multivariate)" = "elasticnet"
+                                                                    "ElasticNet (multivariate)" = "elasticnet",
+                                                                    "Boruta selection" = "boruta"
                                                                     # ,
                                                                     # "Ridge (multivariate)" = "ridge"
                                                                     )
@@ -333,6 +335,13 @@ shinyUI(fluidPage(
                                                                                        numericInput("lambdaselection","Lambda (regularization strength)" , 0.01, min =0, max = 10, step = 0.01)
                                                                       ),
                                                                       conditionalPanel(condition ="input.help",helpText("Lambda controls the strength of regularization. Use automatic selection via cross-validation for optimal results."))
+                                                     ),
+                                                     conditionalPanel(condition ="input.test=='boruta'",
+                                                                      h5("Boruta Parameters"),
+                                                                      numericInput("boruta_maxRuns","Max iterations (maxRuns)" , 100, min = 20, max = 1000, step = 50),
+                                                                      conditionalPanel(condition ="input.help",helpText("Maximum number of random forest runs for Boruta. Increase for more stable results.")),
+                                                                      numericInput("boruta_pValue","p-value threshold" , 0.01, min = 0.001, max = 0.1, step = 0.005),
+                                                                      conditionalPanel(condition ="input.help",helpText("Significance level for variable importance comparison against shadow attributes."))
                                                      )
                                               )
                                             ),br(),
@@ -392,8 +401,51 @@ shinyUI(fluidPage(
                                                                       p(downloadButton('downloadmultivariateresults', 'Download multivariate results'),align="center")
                                                                )
                                                              )
-                                            )
-                                            ,
+                                            ),
+                                            conditionalPanel( condition =  "input.test=='boruta'",
+                                                              fluidRow(
+                                                                
+                                                                column(12,
+                                                                  h4("Boruta Selection Results"),
+                                                                 div(
+                                                                   class = "well",
+                                                                   style  = 'color :  gray;',
+                                                                   fluidRow(
+                                                                     column(
+                                                                       width = 3 , 
+                                                                       tags$b("Confirmed: "), textOutput("boruta_n_confirmed", inline = TRUE), " variables" #, br()
+                                                                     ) ,
+                                                                     column(
+                                                                       width = 3, 
+                                                                       tags$b("Tentative: "), textOutput("boruta_n_tentative", inline = TRUE), " variables"#, br()
+                                                                     ),
+                                                                     column(
+                                                                       width = 3 ,
+                                                                       tags$b("Rejected: "), textOutput("boruta_n_rejected", inline = TRUE), " variables" #, br()
+                                                                     ),
+                                                                     column(
+                                                                       width = 3 ,
+                                                                       tags$b("Shadow max threshold: "), textOutput("boruta_shadow_max", inline = TRUE) #, br(), br()
+                                                                     )
+                                                                   )
+                                                                 )
+                                                                )
+                                                              ),
+                                                              br(), br(),
+                                                              fluidRow(
+                                                                column(12,
+                                                                  plotOutput("boruta_importance_plot", width = "100%", height = 500) %>% withSpinner(color="#0dc5c1", type = 1),
+                                                                  p(downloadButton("download_boruta_plot", "Download plot"),
+                                                                    downloadButton("download_boruta_data", "Download raw data"), align = "center")
+                                                                )
+                                                              ),
+                                                              fluidRow(
+                                                                column(12,
+                                                                  h5("Variable Importance Table"),
+                                                                  dataTableOutput("boruta_results_table") %>% withSpinner(color="#0dc5c1", type = 1)
+                                                                )
+                                                              )
+                                            ),
                                             conditionalPanel(condition ="input.SFtest==true  ",
                                                              column(6,conditionalPanel(condition ="input.help",
                                                                                        helpText("Barplot presents the Results of shapiro and Fisher test")),
@@ -574,19 +626,60 @@ shinyUI(fluidPage(
                                                                                      "GridSearchCV (superml)" = "gridsearch"),
                                                                                    selected = "traditional"),
                                                                       conditionalPanel(condition ="input.help",
-                                                                                       helpText("Manual: set mtry manually"),
-                                                                                       helpText("tuneRF: optimizes mtry only"),
-                                                                                       helpText("GridSearchCV: optimizes ntree, mtry, nodesize")),
-                                                                      numericInput("ntreerf","Number of trees" , 1000, min =100, max = 5000, step = 100),
-                                                                      conditionalPanel(condition ="input.tuning_method_rf=='manual'",
-                                                                                       numericInput("mtryrf","mtry (variables per split)" , 5, min =1, max = 100, step = 1),
-                                                                                       conditionalPanel(condition ="input.help",
-                                                                                                        helpText("Number of variables randomly sampled at each split"))
+                                                                                       helpText("Manual: set all hyperparameters manually"),
+                                                                                       helpText("tuneRF: optimizes mtry, nodesize and ntree via OOB error"),
+                                                                                       helpText("GridSearchCV: full grid search over ntree, mtry, nodesize, maxnodes, sampsize")),
+                                                                      # ── Manual mode ──
+                                                                      conditionalPanel(
+                                                                        condition = "input.tuning_method_rf == 'manual'",
+                                                                        numericInput("ntreerf", "Number of trees (ntree)", 1000, min = 100, max = 5000, step = 100),
+                                                                        numericInput("mtryrf", "mtry (variables per split)", 5, min = 1, max = 500, step = 1),
+                                                                        numericInput("nodesizerf", "Minimum node size (nodesize)", 1, min = 1, max = 50, step = 1),
+                                                                        numericInput("maxnodesrf", "Max terminal nodes (maxnodes, 0=unlimited)", 0, min = 0, max = 1000, step = 10),
+                                                                        sliderInput("sampsizerf", "Bootstrap sample fraction (sampsize)", min = 0.3, max = 1.0, value = 1.0, step = 0.05),
+                                                                        checkboxInput("replacerf", "Sample with replacement", value = TRUE),
+                                                                        conditionalPanel(condition ="input.help",
+                                                                                         helpText("nodesize: Minimum number of observations in a terminal node"),
+                                                                                         helpText("maxnodes: Maximum number of terminal nodes (0 = unlimited)"),
+                                                                                         helpText("sampsize: Fraction of training data sampled per tree"),
+                                                                                         helpText("replace: Whether to sample with replacement (bootstrap)"))
+                                                                      ),
+                                                                      # ── Traditional tuneRF mode ──
+                                                                      conditionalPanel(
+                                                                        condition = "input.tuning_method_rf == 'traditional'",
+                                                                        checkboxGroupInput("ntree_range_rf", "ntree values to test:",
+                                                                                           choices  = c("100" = 100, "300" = 300, "500" = 500, "1000" = 1000, "2000" = 2000),
+                                                                                           selected = c(100, 500, 1000), inline = TRUE
+                                                                        ),
+                                                                        checkboxGroupInput("nodesize_range_rf", "nodesize values to test:",
+                                                                                           choices  = c("1" = 1, "3" = 3, "5" = 5, "10" = 10, "20" = 20),
+                                                                                           selected = c(1, 5, 10), inline = TRUE
+                                                                        ),
+                                                                        sliderInput("sampsize_trad_rf", "Bootstrap sample fraction", min = 0.3, max = 1.0, value = 1.0, step = 0.05),
+                                                                        checkboxInput("replace_trad_rf", "Sample with replacement", value = TRUE),
+                                                                        conditionalPanel(condition ="input.help",
+                                                                                         helpText("tuneRF optimizes mtry via OOB error for each ntree/nodesize combination"),
+                                                                                         helpText("The best (ntree, mtry, nodesize) combination is selected"))
+                                                                      ),
+                                                                      # ── GridSearchCV mode ──
+                                                                      conditionalPanel(
+                                                                        condition = "input.tuning_method_rf == 'gridsearch'",
+                                                                        checkboxGroupInput("ntree_grid_values", "ntree grid values:",
+                                                                                           choices  = c("100" = 100, "300" = 300, "500" = 500, "1000" = 1000, "2000" = 2000),
+                                                                                           selected = c(100, 500, 1000), inline = TRUE),
+                                                                        checkboxGroupInput("nodesize_grid_values", "nodesize grid values:",
+                                                                                           choices  = c("1" = 1, "3" = 3, "5" = 5, "10" = 10, "20" = 20),
+                                                                                           selected = c(1, 5, 10) , inline = TRUE),
+                                                                        checkboxGroupInput("maxnodes_grid_values", "maxnodes grid values (0=unlimited):",
+                                                                                           choices  = c("Unlimited" = 0, "10" = 10, "20" = 20, "50" = 50, "100" = 100),
+                                                                                           selected = c(0, 20, 50), inline = TRUE),
+                                                                        checkboxGroupInput("sampsize_grid_values", "sampsize fraction grid:",
+                                                                                           choices  = c("0.5" = 0.5, "0.632" = 0.632, "0.8" = 0.8, "1.0" = 1.0),
+                                                                                           selected = c(0.632, 1.0), inline = TRUE),
+                                                                        conditionalPanel(condition ="input.help",
+                                                                                         helpText("mtry grid: automatically includes sqrt(p), log2(p), p/3, p/2"),
+                                                                                         helpText("sampsize: fraction of n used per tree (0.632 is classic bootstrap proportion)"))
                                                                       )
-                                                                      # ,
-                                                                      # conditionalPanel("input.help" #, 
-                                                                      #                  
-                                                                      # )
                                                      ),
                                                      conditionalPanel(condition ="input.model=='svm'",
                                                                       h5("SVM Hyperparameters"),
@@ -630,7 +723,39 @@ shinyUI(fluidPage(
                                                                                        htmltools::span("Also known as num_boost_round; defines the number of boosting iterations.")
                                                                                        ),
                                                                                        numericInput("maxdepthxgb","Max depth" , 6, min =1, max = 20, step = 1),
-                                                                                       numericInput("etaxgb","Learning rate (eta)" , 0.3, min =0.01, max = 1, step = 0.01),
+                                                                                       fluidRow(
+                                                                                         column(
+                                                                                           6,  numericInput("lambdaxgb","Lambda (L2 regularization)" , 
+                                                                                                            1, min =0, max = Inf, step = 0.1)
+                                                                                         ), 
+                                                                                         column(
+                                                                                           6,  numericInput("alphaxgb","Alpha (L1 regularization)", 
+                                                                                                            0, min = 0, max = 1, step = 0.1)
+                                                                                         )
+                                                                                       )
+                                                                                       ,
+                                                                                       fluidRow(
+                                                                                         # column(12 , 
+                                                                                         column(6 , 
+                                                                                                numericInput("etaxgb","Learning rate (eta)" , 0.3, min =0.01, max = 1, step = 0.01)
+                                                                                         ),
+                                                                                         column(6, 
+                                                                                                numericInput("colsamplexgb","Colsample by tree" , 1, min =0.1, max = 1, step = 0.1)
+                                                                                         )
+                                                                                         # )
+                                                                                       ),
+                                                                                       fluidRow(
+                                                                                         # column(12, 
+                                                                                         column(6,
+                                                                                                numericInput("subsamplexgb","Subsample" , 1, min =0.1, max = 1, step = 0.1)
+                                                                                         ),
+                                                                                         column(6,
+                                                                                                numericInput('gamme_xgb', "gamma", value = 0.1, min = 0, max = 1, step = 0.1)
+                                                                                         )
+                                                                                         # )
+                                                                                       )
+                                                                                       ,
+                                                                                       # numericInput("etaxgb","Learning rate (eta)" , 0.3, min =0.01, max = 1, step = 0.01),
                                                                                        conditionalPanel(condition ="input.help",helpText("Manually set XGBoost hyperparameters"))
                                                                       )
                                                                       # ,
@@ -836,10 +961,13 @@ shinyUI(fluidPage(
                                                                                                                    class =  "well",
                                                                                                                    style = 'color :  blue;',
                                                                                                                    fluidRow(
-                                                                                                                     column(3, strong("Optimal nrounds:"), textOutput("xgbnrounds",inline=T)),
-                                                                                                                     column(3, strong("Max depth:"), textOutput("xgbmaxdepth",inline=T)),
-                                                                                                                     column(3, strong("Learning rate (eta):"), textOutput("xgbeta",inline=T)),
-                                                                                                                     column(3, strong("Min child weight:"), textOutput("xgbminchild",inline=T))
+                                                                                                                     column(2, strong("Optimal nrounds:"), textOutput("xgbnrounds",inline=T)),
+                                                                                                                     column(2, strong("Max depth:"), textOutput("xgbmaxdepth",inline=T)),
+                                                                                                                     column(2, strong("Learning rate (eta):"), textOutput("xgbeta",inline=T)),
+                                                                                                                     column(2, strong("Min child weight:"), textOutput("xgbminchild",inline=T)),
+                                                                                                                     # column(2, strong("Colsample by tree:"), textOutput("xgbcolsample",inline=T)),
+                                                                                                                     column(2, strong("Subsample:"), textOutput("xgbsubsample",inline=T)),
+                                                                                                                     column(2, strong("Gamma:"), textOutput("xgbgamma",inline=T))
                                                                                                                    )
                                                                                                                  )
                                                                                                 ),
@@ -973,6 +1101,306 @@ shinyUI(fluidPage(
                                                        plotOutput("plotimportance"),
                                                        p(downloadButton("downloadplotimportance","Download plot"),
                                                          downloadButton('downloaddataplotimportance', 'Download raw data'),align="center")
+                                              ),
+                                   # Dans tabPanel "Advanced Visualizations" ou nouveau tabPanel "Learning Curve"
+                                   # tabPanel("Learning Curve",
+                                   #          sidebarLayout(
+                                   #            sidebarPanel(
+                                   #              h4("Learning Curve Parameters"),
+                                   #              
+                                   #              selectInput("learning_curve_metric",
+                                   #                          "Metric",
+                                   #                          choices = c("Accuracy" = "accuracy",
+                                   #                                      "AUC" = "auc",
+                                   #                                      "F1 Score" = "f1",
+                                   #                                      "Precision" = "precision",
+                                   #                                      "Recall" = "recall"),
+                                   #                          selected = "accuracy"),
+                                   #              
+                                   #              sliderInput("learning_curve_train_sizes",
+                                   #                          "Training sizes (%)",
+                                   #                          min = 10,
+                                   #                          max = 90,
+                                   #                          value = 10,
+                                   #                            #c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+                                   #                          step = 10),
+                                   #              
+                                   #              numericInput("learning_curve_cv_folds",
+                                   #                           "CV folds (if no validation)",
+                                   #                           value = 5,
+                                   #                           min = 2,
+                                   #                           max = 10),
+                                   #              
+                                   #              checkboxInput("use_validation",
+                                   #                            "Use validation set as test",
+                                   #                            value = TRUE),
+                                   #              
+                                   #              hr(),
+                                   #              
+                                   #              actionButton("run_learning_curve",
+                                   #                           "Generate Learning Curve",
+                                   #                           class = "btn-primary"),
+                                   #              
+                                   #              helpText("Learning curve shows model performance vs training size.",
+                                   #                       "Use to diagnose underfitting (high bias) or overfitting (high variance).")
+                                   #            ),
+                                   #            
+                                   #            mainPanel(
+                                   #              h4("Learning Curve"),
+                                   #              plotOutput("learning_curve_plot") %>% withSpinner(color="#0dc5c1",type = 1),
+                                   #              
+                                   #              hr(),
+                                   #              
+                                   #              fluidRow(
+                                   #                column(6,
+                                   #                       downloadButton("download_learning_curve", "Download Plot", class = "btn-info")
+                                   #                ),
+                                   #                column(6,
+                                   #                       downloadButton("download_learning_curve_data", "Download Data", class = "btn-info")
+                                   #                )
+                                   #              )
+                                   #            )
+                                   #          )
+                                   #          ),
+                                   tabPanel("Learning Curve", icon = icon("chart-line"),
+                                            br(),
+                                            h3("Learning Curve — Multi-class"),
+                                            helpText("Shows how model performance evolves as training set size increases.",
+                                                     "A large gap between training and CV curves indicates overfitting.",
+                                                     "Convergence of the two curves suggests underfitting or insufficient data."),
+                                            hr(),
+                                            fluidRow(
+                                              column(4,
+                                                     sliderInput("lc_size_min", "Minimum training size (%):",
+                                                                 min = 10, max = 50, value = 10, step = 5)
+                                                     
+                                                     ) ,
+                                              column(
+                                                4 , 
+                                                numericInput("lc_n_steps", "Number of size steps:",
+                                                             value = 8, min = 3, max = 20, step = 1)
+                                              ),
+                                              #br(),
+                                              column(
+                                                4,
+                                                actionButton("run_learning_curve",
+                                                             h4("Compute Learning Curve"),
+                                                             style = "background-color: #2980B9; color: white; border-color: #2980B9;" #, width = 150
+                                                             )
+                                              ),
+                                              
+                                              br(),
+                                              helpText("/!\\ Each step trains the model from scratch.",
+                                                       "Computation time scales with number of steps and model complexity.")
+                                              
+                                            ), 
+                                            fluidRow(
+                                              # column(3,
+                                              #        sliderInput("lc_size_min", "Minimum training size (%):",
+                                              #                    min = 10, max = 50, value = 10, step = 5),
+                                              #        numericInput("lc_n_steps", "Number of size steps:",
+                                              #                     value = 8, min = 3, max = 20, step = 1),
+                                              #        br(),
+                                              #        actionButton("run_learning_curve",
+                                              #                     h4("Compute Learning Curve"),
+                                              #                     style = "background-color: #2980B9; color: white; border-color: #2980B9;",
+                                              #                     width = 150),
+                                              #        br(),
+                                              #        helpText("/!\\ Each step trains the model from scratch.",
+                                              #                 "Computation time scales with number of steps and model complexity.")
+                                              # ),
+                                              column(12,
+                                                     fluidRow(
+                                                       column(6,
+                                                              plotOutput("plot_lc_auc", height = "500px") %>% withSpinner(color = "#0dc5c1", type = 1),
+                                                              p(downloadButton("download_lc_auc", "Download AUC plot"), align = "center")
+                                                       ),
+                                                       column(6,
+                                                              plotOutput("plot_lc_accuracy", height = "500px") %>% withSpinner(color = "#0dc5c1", type = 1),
+                                                              p(downloadButton("download_lc_accuracy", "Download Accuracy plot"), align = "center")
+                                                       )
+                                                     )
+                                              )
+                                            ),
+                                            hr(),
+                                            h4("Raw Data"),
+                                            dataTableOutput("table_lc") %>% withSpinner(color = "#0dc5c1", type = 1),
+                                            p(downloadButton("download_lc_data", "Download CSV"), align = "center")
+                                   ),
+                                              tabPanel("Model Comparison", icon = icon("balance-scale"),
+                                                       br(),
+                                                       h3("Compare All Models"),
+                                                       helpText("Train all available models on the same data and compare their performance."),
+                                                       fluidRow(
+                                                         column(6,
+                                                                checkboxGroupInput("models_to_compare", "Models to compare:",
+                                                                                   c("Random Forest" = "randomforest",
+                                                                                     "SVM" = "svm",
+                                                                                     "ElasticNet" = "elasticnet",
+                                                                                     "XGBoost" = "xgboost",
+                                                                                     "Naive Bayes" = "naivebayes",
+                                                                                     "KNN" = "knn"),
+                                                                                   selected = c("randomforest", "svm", "elasticnet"))
+                                                         ),
+                                                         column(6,
+                                                                actionButton("run_comparison", h4("Run Comparison"),
+                                                                             style = "background-color: #63BFBF; color: white; border-color: #63BFBF;",
+                                                                             width = 200),
+                                                                br(), br(),
+                                                                helpText("This will train all selected models with automatic tuning.")
+                                                         )
+                                                       ),
+                                                       hr(),
+                                                       h4("Performance Summary"),
+                                                       dataTableOutput("comparison_metrics_table") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                       p(downloadButton("download_comparison_metrics", "Download metrics"), align = "center"),
+                                                       hr(),
+                                                       fluidRow(
+                                                         shiny::plotOutput("plotcompared_model",height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                         p(downloadButton("downloadplotcompared_model", "downlaod plot"), align= 'center')
+                                                       ), 
+                                                       fluidRow(
+                                                         column(6,
+                                                                h4("Radar Plot - Training"),
+                                                                plotOutput("radar_plot_train", height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                p(downloadButton("download_radar_train", "Download plot"), align = "center")
+                                                         ),
+                                                         column(6,
+                                                                h4("Radar Plot - Validation"),
+                                                                plotOutput("radar_plot_val", height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                p(downloadButton("download_radar_val", "Download plot"), align = "center")
+                                                         )
+                                                       ),
+                                                       hr(),
+                                                       h4("DeLong Test (AUC Comparison)"),
+                                                       helpText("Statistical test comparing AUC between pairs of models (p-value < 0.05 = significant difference)."),
+                                                       dataTableOutput("delong_test_table") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                       p(downloadButton("download_delong_table", "Download DeLong results"), align = "center"),
+                                                       hr(),
+                                                       h4("DeLong Test — FDR Corrected (Benjamini-Hochberg)"),
+                                                       helpText("P-values adjusted for multiple pairwise comparisons using the Benjamini-Hochberg method."),
+                                                       dataTableOutput("delong_corrected_table") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                       p(downloadButton("download_delong_corrected", "Download FDR-corrected results"), align = "center"),
+                                                       hr(),
+                                                       h4("DeLong Test — Per-Class Detail (One-vs-Rest)"),
+                                                       helpText("DeLong p-values for each class separately (OvR decomposition). Shows AUC per model and per class."),
+                                                       dataTableOutput("delong_perclass_table") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                       p(downloadButton("download_delong_perclass", "Download per-class results"), align = "center")
+                                              ),
+                                              tabPanel("Interpretability (XAI)", icon = icon("lightbulb"),
+                                                       br(),
+                                                       h3("Model Interpretability"),
+                                                       conditionalPanel(condition = "input.model != 'nomodel'",
+                                                         fluidRow(
+                                                           column(12,
+                                                                  h4("SHAP Values (Feature Importance)"),
+                                                                  helpText("SHAP values measure the contribution of each feature to individual predictions."),
+                                                                  fluidRow(
+                                                                    column(4, numericInput("shap_n_samples", "Number of samples for SHAP", 30, min = 5, max = 100, step = 5)),
+                                                                    column(4, actionButton("compute_shap", "Compute SHAP",
+                                                                                           style = "background-color: #63BFBF; color: white; margin-top: 25px;"))
+                                                                  ),
+                                                                  plotOutput("shap_importance_plot", height = "500px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                  p(downloadButton("download_shap_plot", "Download SHAP plot"),
+                                                                    downloadButton("download_shap_data", "Download SHAP data"), align = "center")
+                                                           )
+                                                         ),
+                                                         hr(),
+                                                         fluidRow(
+                                                           column(12,
+                                                                  h4("Partial Dependence Plot (PDP)"),
+                                                                  helpText("Shows the marginal effect of a feature on model predictions."),
+                                                                  fluidRow(
+                                                                    column(4, selectInput("pdp_feature", "Select feature:", choices = NULL)),
+                                                                    column(4, actionButton("compute_pdp", "Generate PDP",
+                                                                                           style = "background-color: #63BFBF; color: white; margin-top: 25px;"))
+                                                                  ),
+                                                                  plotOutput("pdp_plot", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                  p(downloadButton("download_pdp_plot", "Download PDP"), align = "center")
+                                                           )
+                                                         ),
+                                                         hr(),
+                                                         fluidRow(
+                                                           column(12,
+                                                                  h4("LIME (Local Interpretable Model-agnostic Explanations)"),
+                                                                  helpText("Explains individual predictions by approximating the model locally with an interpretable model."),
+                                                                  fluidRow(
+                                                                    column(3, numericInput("lime_n_features", "Number of features", 10, min = 3, max = 30, step = 1)),
+                                                                    column(3, numericInput("lime_sample_idx", "Sample index to explain", 1, min = 1, max = 100, step = 1)),
+                                                                    column(3, actionButton("compute_lime", "Generate LIME",
+                                                                                           style = "background-color: #63BFBF; color: white; margin-top: 25px;"))
+                                                                  ),
+                                                                  plotOutput("lime_plot", height = "500px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                  p(downloadButton("download_lime_plot", "Download LIME plot"), align = "center")
+                                                           )
+                                                         )
+                                                       ),
+                                                       conditionalPanel(condition = "input.model == 'nomodel'",
+                                                                        h4("Please select and train a model first.", style = "color: grey; text-align: center; margin-top: 50px;")
+                                                       )
+                                              ),
+                                              tabPanel("Advanced Visualizations", icon = icon("chart-area"),
+                                                       br(),
+                                                       h3("Advanced Visualizations"),
+                                                       fluidRow(
+                                                         column(4,
+                                                                radioButtons("adv_viz_data_source", "Data source:",
+                                                                             c("Transformed data" = "transformed",
+                                                                               "Selected variables (test)" = "selected",
+                                                                               "Model variables" = "model"),
+                                                                             selected = "transformed")
+                                                         ),
+                                                         column(4,
+                                                                numericInput("tsne_perplexity", "t-SNE perplexity", 30, min = 5, max = 100, step = 5),
+                                                                numericInput("umap_n_neighbors", "UMAP n_neighbors", 15, min = 2, max = 50, step = 1)
+                                                         ),
+                                                         column(4,
+                                                                numericInput("heatmap_n_top", "Heatmap top N features", 30, min = 5, max = 100, step = 5),
+                                                                numericInput("cor_threshold", "Correlation network threshold", 0.6, min = 0.1, max = 0.95, step = 0.05)
+                                                         )
+                                                       ),
+                                                       hr(),
+                                                       h4("Dimensionality Reduction"),
+                                                       fluidRow(
+                                                         column(6,
+                                                                h5("t-SNE"),
+                                                                plotlyOutput("tsne_plot", height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                p(downloadButton("download_tsne", "Download t-SNE"), align = "center")
+                                                         ),
+                                                         column(6,
+                                                                h5("UMAP"),
+                                                                plotlyOutput("umap_plot", height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                p(downloadButton("download_umap", "Download UMAP"), align = "center")
+                                                         )
+                                                       ),
+                                                       hr(),
+                                                       h4("Feature Analysis"),
+                                                       fluidRow(
+                                                         column(12,
+                                                                h5("Clustered Heatmap"),
+                                                                plotOutput("clustered_heatmap", height = "600px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                p(downloadButton("download_heatmap", "Download heatmap"), align = "center")
+                                                         )
+                                                       ),
+                                                       hr(),
+                                                       fluidRow(
+                                                         column(12,
+                                                                h5("Correlation Network"),
+                                                                plotOutput("correlation_network", height = "600px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                p(downloadButton("download_cor_network", "Download network"), align = "center")
+                                                         )
+                                                       ),
+                                                       hr(),
+                                                       conditionalPanel(condition = "input.model != 'nomodel'",
+                                                         fluidRow(
+                                                           column(12,
+                                                                  h5("Calibration Plot"),
+                                                                  helpText("Shows how well predicted probabilities match actual outcomes."),
+                                                                  plotOutput("calibration_plot", height = "500px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                  p(downloadButton("download_calibration", "Download calibration plot"), align = "center")
+                                                           )
+                                                         )
+                                                       )
                                               ),
                                               tabPanel("Test parameters", icon  =  icon("cog"),
                                                        fluidRow(

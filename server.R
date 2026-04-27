@@ -824,9 +824,94 @@ TEST<-reactive({
 
   list(LEARNINGDIFF=restest$tabdiff,DATATEST=restest$datatest,HYPOTHESISTEST=restest$hypothesistest,
        USEDDATA=restest$useddata,testparameters=restest$testparameters,
-       MULTIVARIATERESULTS=restest$multivariateresults)
+       MULTIVARIATERESULTS=restest$multivariateresults,BORUTA_RESULT=restest$boruta_result)
 
 })
+
+
+# =============================================================================
+# BORUTA SELECTION OUTPUTS
+# =============================================================================
+output$boruta_n_confirmed <- renderText({
+  boruta_res <- TEST()$BORUTA_RESULT
+  if(!is.null(boruta_res)){
+    length(boruta_res$confirmed)
+  } else {
+    0
+  }
+})
+
+output$boruta_n_tentative <- renderText({
+  boruta_res <- TEST()$BORUTA_RESULT
+  if(!is.null(boruta_res)){
+    length(boruta_res$tentative)
+  } else {
+    0
+  }
+})
+
+output$boruta_n_rejected <- renderText({
+  boruta_res <- TEST()$BORUTA_RESULT
+  if(!is.null(boruta_res)){
+    length(boruta_res$rejected)
+  } else {
+    0
+  }
+})
+
+output$boruta_shadow_max <- renderText({
+  boruta_res <- TEST()$BORUTA_RESULT
+  if(!is.null(boruta_res)){
+    round(boruta_res$shadow_max, 4)
+  } else {
+    "N/A"
+  }
+})
+
+output$boruta_importance_plot <- renderPlot({
+  boruta_res <- TEST()$BORUTA_RESULT
+  req(boruta_res)
+  boruta_importance_plot(boruta_res$boruta_result, graph = TRUE)
+})
+
+output$download_boruta_plot <- downloadHandler(
+  filename = function() { paste('boruta_importance_plot', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    boruta_res <- TEST()$BORUTA_RESULT
+    if(!is.null(boruta_res)){
+      png(file, width = 1000, height = 600, res = 120)
+      print(boruta_importance_plot(boruta_res$boruta_result, graph = TRUE))
+      dev.off()
+    }
+  }
+)
+
+output$download_boruta_data <- downloadHandler(
+  filename = function() { paste('boruta_importance_data', '.', input$paramdowntable, sep='') },
+  content = function(file) {
+    boruta_res <- TEST()$BORUTA_RESULT
+    if(!is.null(boruta_res)){
+       write.csv(boruta_res$importance, file, row.names = FALSE)
+    }
+  }
+)
+
+output$boruta_results_table <- renderDataTable({
+  boruta_res <- TEST()$BORUTA_RESULT
+  if(!is.null(boruta_res) && nrow(boruta_res$importance) > 0){
+    data_view  =  boruta_res$importance
+    data_view = data_view[data_view$decision=="Confirmed", ]
+    datatable(data_view,
+              #boruta_res$importance,
+              options = list(orderClasses = FALSE, responsive = FALSE, pageLength = 10),
+              rownames = FALSE)
+  } else {
+    data.frame()
+  }
+})
+
+
+
 ##
 output$downloadddatadiff<- downloadHandler(
   filename = function() { paste('Datadiff', '.',input$paramdowntable, sep='') },
@@ -3428,7 +3513,7 @@ output$pca_plot_2d <- renderPlotly({
   PlotPca2D_interactive(
     data = data$X, 
     y = data$y, 
-    title = "PCA 2D - Variables sélectionnées (coloré par labels d'entraînement)"
+    title = "PCA 2D - selected variables"
   )
 })
 
@@ -3451,7 +3536,7 @@ output$pca_plot_3d <- renderPlotly({
     PlotPca3D_interactive(
       data = data$X, 
       y = data$y, 
-      title = "PCA 3D - Variables sélectionnées (coloré par labels d'entraînement)"
+      title = "PCA 3D - selected variables"
     )
   }
 })
@@ -3474,8 +3559,8 @@ output$pca_variance_table <- renderDataTable({
   
   variance_df <- data.frame(
     Composante = paste0("PC", 1:n_components),
-    "Variance expliquée (%)" = round(var_explained[1:n_components], 2),
-    "Variance cumulée (%)" = round(var_cumulative[1:n_components], 2),
+    "Explained variance (%)" = round(var_explained[1:n_components], 2),
+    "Cumulative variance (%)" = round(var_cumulative[1:n_components], 2),
     check.names = FALSE
   )
   
@@ -3554,7 +3639,7 @@ output$pca_plot_2d_stats <- renderPlotly({
       PlotPca2D_interactive(
         data = X, 
         y = y, 
-        title = "PCA 2D - Variables sélectionnées"
+        title = "PCA 2D - selected variables"
       )
     }
   }
@@ -3574,12 +3659,12 @@ output$pca_plot_3d_stats <- renderPlotly({
       PlotPca3D_interactive(
         data = X, 
         y = y, 
-        title = "PCA 3D - Variables sélectionnées"
+        title = "PCA 3D - selected variables"
       )
     } else {
       plot_ly() %>%
         layout(
-          title = "Pas assez de variables pour la vue 3D",
+          title = "Not enough variables for the 3D view",
           xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
           yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE)
         )
@@ -3656,3 +3741,80 @@ output$download_pca_combined <- downloadHandler(
 )
 
 }) 
+# =============================================================================
+# BORUTA SELECTION OUTPUTS
+# =============================================================================
+output <- renderText({
+  boruta_res <- TEST()
+  if(!is.null(boruta_res)){
+    length(boruta_res)
+  } else {
+    0
+  }
+})
+
+output <- renderText({
+  boruta_res <- TEST()
+  if(!is.null(boruta_res)){
+    length(boruta_res)
+  } else {
+    0
+  }
+})
+
+output <- renderText({
+  boruta_res <- TEST()
+  if(!is.null(boruta_res)){
+    length(boruta_res)
+  } else {
+    0
+  }
+})
+
+output <- renderText({
+  boruta_res <- TEST()
+  if(!is.null(boruta_res)){
+    round(boruta_res, 4)
+  } else {
+    "N/A"
+  }
+})
+
+output <- renderPlot({
+  boruta_res <- TEST()
+  req(boruta_res)
+  boruta_importance_plot(boruta_res, graph = TRUE)
+})
+
+output <- downloadHandler(
+  filename = function() { paste('boruta_importance_plot', '.', input, sep='') },
+  content = function(file) {
+    boruta_res <- TEST()
+    if(!is.null(boruta_res)){
+      png(file, width = 1000, height = 600, res = 120)
+      print(boruta_importance_plot(boruta_res, graph = TRUE))
+      dev.off()
+    }
+  }
+)
+
+output <- downloadHandler(
+  filename = function() { paste('boruta_importance_data', '.', input, sep='') },
+  content = function(file) {
+    boruta_res <- TEST()
+    if(!is.null(boruta_res)){
+      write.csv(boruta_res, file, row.names = FALSE)
+    }
+  }
+)
+
+output <- renderDataTable({
+  boruta_res <- TEST()
+  if(!is.null(boruta_res) && nrow(boruta_res) > 0){
+    datatable(boruta_res,
+              options = list(orderClasses = FALSE, responsive = FALSE, pageLength = 15),
+              rownames = FALSE)
+  } else {
+    data.frame()
+  }
+})
