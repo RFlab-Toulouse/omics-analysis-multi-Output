@@ -711,12 +711,137 @@ TRANSFORMDATA<-reactive({
   validate(need(ncol(learningselect)>0,"No select dataset"))
   if(transformdataparameters$rempNA%in%c("pca","missforest")){
     validate(need(min(apply(X = learningselect,MARGIN = 2,FUN = function(x){sum(!is.na(x))}))>1,"not enough data for pca estimation"))
-  } 
-  learningtransform<-transformdatafunction(learningselect = learningselect,structuredfeatures = structuredfeatures,
-                                      datastructuresfeatures =   datastructuresfeatures,transformdataparameters = transformdataparameters)
+  }
+  # transformdatafunction retourne maintenant une liste (learningtransform + train_params)
+  res_transform <- transformdatafunction(learningselect = learningselect,
+                                         structuredfeatures = structuredfeatures,
+                                         datastructuresfeatures = datastructuresfeatures,
+                                         transformdataparameters = transformdataparameters)
+  learningtransform <- res_transform$learningtransform
+  train_params      <- res_transform$train_params
 
-  list(LEARNINGTRANSFORM=learningtransform,transformdataparameters=transformdataparameters)
+  list(LEARNINGTRANSFORM=learningtransform,
+       transformdataparameters=transformdataparameters,
+       TRAIN_PARAMS=train_params)
 })
+
+# ==========================================================================
+# ADVANCED VISUALIZATIONS: DATA SOURCE REACTIVE
+# ==========================================================================
+adv_viz_data <- reactive({
+  req(input$adv_viz_data_source)
+  
+  if(input$adv_viz_data_source == "transformed") {
+    data <- TRANSFORMDATA()$LEARNINGTRANSFORM   # données tranformées
+    if(is.null(data)) return(NULL)
+    y <- data[, 1]; X <- data[, -1, drop = FALSE]
+  } else if(input$adv_viz_data_source == "selected") {
+    if(input$test == "notest") return(NULL)
+    data <- TEST()$LEARNINGDIFF    # données issues de la selection de variables 
+    if(is.null(data)) return(NULL)
+    y <- data[, 1]; X <- data[, -1, drop = FALSE]
+  } else if(input$adv_viz_data_source == "model") {
+    if(input$model == "nomodel") return(NULL)
+    model_result <- MODEL()
+    if(is.null(model_result) || is.null(model_result$DATALEARNINGMODEL)) return(NULL)
+    data <- model_result$DATALEARNINGMODEL$learningmodel # learnig data
+    if(is.null(data)) return(NULL)
+    y <- data[, 1]; X <- data[, -1, drop = FALSE]
+  }
+  
+  if(ncol(X) < 2) return(NULL)
+  list(X = X, y = y)
+})
+
+# t-SNE
+output$tsne_plot <- renderPlotly({
+  data <- adv_viz_data()
+  req(data)
+  plot_tsne(data$X, data$y, perplexity = input$tsne_perplexity)
+})
+
+
+output$download_tsne <- downloadHandler(
+  filename = function() { paste('tsne_', Sys.Date(), '.html', sep='') },
+  content = function(file) {
+    data <- adv_viz_data(); req(data)
+    p <- plot_tsne(data$X, data$y, perplexity = input$tsne_perplexity)
+    htmlwidgets::saveWidget(as_widget(p), file)
+  })
+
+# UMAP
+output$umap_plot <- renderPlotly({
+  data <- adv_viz_data()
+  req(data)
+  plot_umap(data$X, data$y, n_neighbors = input$umap_n_neighbors)
+})
+
+
+output$download_umap <- downloadHandler(
+  filename = function() { paste('umap_', Sys.Date(), '.html', sep='') },
+  content = function(file) {
+    data <- adv_viz_data(); req(data)
+    p <- plot_umap(data$X, data$y, n_neighbors = input$umap_n_neighbors)
+    htmlwidgets::saveWidget(as_widget(p), file)
+  })
+
+# CLUSTERED HEATMAP
+output$clustered_heatmap <- renderPlot({
+  data <- adv_viz_data()
+  req(data)
+  plot_clustered_heatmap(data$X, data$y, n_top = input$heatmap_n_top)
+  
+})
+
+
+output$download_heatmap <- downloadHandler(
+  filename = function() { paste('clustered_heatmap.', input$paramdownplot, sep='') },
+  content = function(file) {
+    data <- adv_viz_data(); req(data)
+    if(input$paramdownplot == "png") png(file, width = 1000, height = 800)
+    else if(input$paramdownplot == "pdf") pdf(file, width = 12, height = 10)
+    else jpeg(file, width = 1000, height = 800)
+    plot_clustered_heatmap(data$X, data$y, n_top = input$heatmap_n_top)
+    dev.off()
+  })
+
+# CORRELATION NETWORK
+output$correlation_network <- renderPlot({
+  data <- adv_viz_data()
+  req(data)
+  plot_correlation_network(data$X, cor_threshold = input$cor_threshold)
+})
+
+output$download_cor_network <- downloadHandler(
+  filename = function() { paste('correlation_network.', input$paramdownplot, sep='') },
+  content = function(file) {
+    data <- adv_viz_data(); req(data)
+    ggsave(file, plot = plot_correlation_network(data$X, cor_threshold = input$cor_threshold),
+           device = input$paramdownplot, width = 10, height = 10)
+  })
+
+# CALIBRATION PLOT
+output$calibration_plot <- renderPlot({
+  req(MODEL())
+  tryCatch({
+    actual <- MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+    scores <- MODEL()$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel) - 1)]
+    plot_calibration(actual, as.matrix(scores))
+  }, error = function(e) {
+    ggplot() + annotate("text", x = 0.5, y = 0.5,
+                        label = paste("Calibration error:", e$message), size = 5, color = "red") +
+      theme_void()
+  })
+})
+output$download_calibration <- downloadHandler(
+  filename = function() { paste('calibration_plot.', input$paramdownplot, sep='') },
+  content = function(file) {
+    req(MODEL())
+    actual <- MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+    scores <- MODEL()$DATALEARNINGMODEL$reslearningmodel[, 2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel) - 1)]
+    ggsave(file, plot = plot_calibration(actual, as.matrix(scores)), device = input$paramdownplot)
+  })
+
 
 ##
 output$downloaddatatransform<- downloadHandler(
@@ -1307,6 +1432,7 @@ MODEL<-reactive({
   validation<<-DATA()$VALIDATION
   datastructuresfeatures<<-SELECTDATA()$DATASTRUCTUREDFEATURES
   transformdataparameters<<-TRANSFORMDATA()$transformdataparameters
+  train_params<<-TRANSFORMDATA()$TRAIN_PARAMS
   learningselect<-SELECTDATA()$LEARNINGSELECT
   # Get hyperparameters for all models
   alpha_model <- NULL
@@ -1427,7 +1553,8 @@ MODEL<-reactive({
                            modelparameters = modelparameters,
                            transformdataparameters = transformdataparameters,
                            datastructuresfeatures =  datastructuresfeatures,
-                           learningselect = learningselect)
+                           learningselect = learningselect,
+                           train_params = train_params)
   
   # cat("on est dans le server model \n")
   # print(str(resmodel$datalearningmodel))
@@ -1772,7 +1899,7 @@ output$specificitydecouv <- renderText({
   }
 })
 
-# Ajouter un output pour les métriques détaillées multi-classe
+# un output pour les métriques détaillées multi-classe
 # output$detailed_metrics_decouv <- renderTable({
 #   datalearningmodel <- MODEL()$DATALEARNINGMODEL
 #   cat("dans detailed_metrics_decouv :  datalearningmodel : \n")
@@ -2490,6 +2617,237 @@ output$downloaddatavalroc <- downloadHandler(
   }
 )
 
+# ── Score plot per class (Train) ──────────────────────────────────────────────
+output$plotscoreperclass_decouv <- renderPlot({
+  req(MODEL())
+  model_result <- MODEL()
+  req(model_result$DATALEARNINGMODEL)
+  
+  actual <- model_result$DATALEARNINGMODEL$reslearningmodel$classlearning
+  scores <- as.matrix(model_result$DATALEARNINGMODEL$reslearningmodel[,
+                                                                      2:(ncol(model_result$DATALEARNINGMODEL$reslearningmodel) - 1)])
+  # Renommer uniquement si les niveaux de actual matchent après nettoyage
+  clean_names <- sub("^score_|^Prob_", "", colnames(scores))
+  lev <- levels(actual)
+  if (all(lev %in% clean_names)) {
+    colnames(scores) <- clean_names
+  } else if (!all(lev %in% colnames(scores))) {
+    # Forcer le renommage quand même
+    colnames(scores) <- clean_names
+  }
+  
+  grid::grid.draw(score_plot_per_class(actual, scores, set_name = "Training"))
+}, height = function() {
+  req(MODEL())
+  n_cl <- length(levels(MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning))
+  ceiling(n_cl / min(3, n_cl)) * 320
+})
+
+output$downloadplotscoreperclass_decouv <- downloadHandler(
+  filename = function() { paste0("score_plot_per_class_train.", input$paramdownplot) },
+  content = function(file) {
+    actual <- MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+    scores <- as.matrix(MODEL()$DATALEARNINGMODEL$reslearningmodel[,
+                                                                   2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel) - 1)])
+    # Renommer uniquement si les niveaux de actual matchent après nettoyage
+    clean_names <- sub("^score_|^Prob_", "", colnames(scores))
+    lev <- levels(actual)
+    if (all(lev %in% clean_names)) {
+      colnames(scores) <- clean_names
+    } else if (!all(lev %in% colnames(scores))) {
+      # Forcer le renommage quand même
+      colnames(scores) <- clean_names
+    }
+    n_cl   <- length(levels(actual))
+    h      <- ceiling(n_cl / min(3, n_cl)) * 320
+    ggsave(file, plot = gridExtra::grid.arrange(score_plot_per_class(actual, scores, "Training")),
+           device = input$paramdownplot, width = 14, height = h / 100)
+  }, contentType = NA)
+
+# ── Score plot per class (Validation) ─────────────────────────────────────────
+output$plotscoreperclass_val <- renderPlot({
+  req(MODEL(), YOUDEN_THRESHOLDS())
+  model_result <- MODEL()
+  req(model_result$DATAVALIDATIONMODEL)
+  
+  actual <- model_result$DATAVALIDATIONMODEL$resvalidationmodel$classval
+  scores <- as.matrix(model_result$DATAVALIDATIONMODEL$resvalidationmodel[,
+                                                                          2:(ncol(model_result$DATAVALIDATIONMODEL$resvalidationmodel) - 1)])
+  colnames(scores) <- sub("^score_|^Prob_", "", colnames(scores))
+  
+  grid::grid.draw(score_plot_per_class(actual, scores,
+                                       set_name = "Validation",
+                                       thresholds = YOUDEN_THRESHOLDS()))
+}, height = function() {
+  req(MODEL())
+  req(MODEL()$DATAVALIDATIONMODEL)
+  n_cl <- length(levels(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval))
+  ceiling(n_cl / min(3, n_cl)) * 320
+})
+
+output$downloadplotscoreperclass_val <- downloadHandler(
+  filename = function() { paste0("score_plot_per_class_val.", input$paramdownplot) },
+  content = function(file) {
+    actual <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+    scores <- as.matrix(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel[,
+                                                                       2:(ncol(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel) - 1)])
+    colnames(scores) <- sub("^score_|^Prob_", "", colnames(scores))
+    n_cl   <- length(levels(actual))
+    h      <- ceiling(n_cl / min(3, n_cl)) * 320
+    ggsave(file, plot = gridExtra::grid.arrange(
+      score_plot_per_class(actual, scores,
+                           set_name = "Validation",
+                           thresholds = YOUDEN_THRESHOLDS())),
+      device = input$paramdownplot, width = 14, height = h / 100)
+  }, contentType = NA)
+
+
+
+# ── Score plot carrousel (Train) ───────────────────────────────────────────────
+output$scoreplot_carousel_decouv <- renderPlot({
+  req(MODEL())
+  actual  <- MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+  scores  <- as.matrix(MODEL()$DATALEARNINGMODEL$reslearningmodel[,
+                                                                  2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel) - 1)])
+  colnames(scores) <- sub("^score_|^Prob_", "", colnames(scores))
+  classes <- levels(actual)
+  req(length(classes) > 0)
+  idx <- ((carousel_idx_decouv() - 1) %% length(classes)) + 1
+  cl  <- classes[idx]
+  req(nchar(cl) > 0)
+  score_plot_single_class(actual, scores, cl, set_name = "Training")
+})
+
+output$carousel_class_label_decouv <- renderText({
+  req(MODEL())
+  classes <- levels(MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning)
+  n  <- length(classes)
+  req(n > 0)
+  idx <- ((carousel_idx_decouv() - 1) %% n) + 1
+  paste0("Class ", idx, " / ", n, " : ", classes[idx])
+})
+
+output$carousel_class_label_val <- renderText({
+  req(MODEL(), MODEL()$DATAVALIDATIONMODEL)
+  classes <- levels(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval)
+  n  <- length(classes)
+  req(n > 0)
+  idx <- ((carousel_idx_val() - 1) %% n) + 1
+  paste0("Class ", idx, " / ", n, " : ", classes[idx])
+})
+
+# ── Compteurs carrousel ────────────────────────────────────────────────────────
+carousel_idx_decouv <- reactiveVal(1)
+carousel_idx_val    <- reactiveVal(1)
+
+observeEvent(input$carousel_next_decouv, {
+  n <- length(levels(MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning))
+  carousel_idx_decouv((carousel_idx_decouv() %% n) + 1)
+})
+observeEvent(input$carousel_prev_decouv, {
+  n <- length(levels(MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning))
+  carousel_idx_decouv(((carousel_idx_decouv() - 2 + n) %% n) + 1)
+})
+observeEvent(input$carousel_next_val, {
+  n <- length(levels(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval))
+  carousel_idx_val((carousel_idx_val() %% n) + 1)
+})
+observeEvent(input$carousel_prev_val, {
+  n <- length(levels(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval))
+  carousel_idx_val(((carousel_idx_val() - 2 + n) %% n) + 1)
+})
+
+# ── Score plot sélection groupe (Train) ───────────────────────────────────────
+output$scoreplot_select_ui_decouv <- renderUI({
+  req(MODEL())
+  actual  <- MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+  classes <- levels(actual)
+  selectInput("scoreplot_class_decouv", "Select class (vs Rest):",
+              choices = classes, selected = classes[1])
+})
+
+output$scoreplot_select_decouv <- renderPlot({
+  req(MODEL(), input$scoreplot_class_decouv)
+  actual <- MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+  scores <- as.matrix(MODEL()$DATALEARNINGMODEL$reslearningmodel[,
+                                                                 2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel) - 1)])
+  colnames(scores) <- sub("^score_|^Prob_", "", colnames(scores))
+  score_plot_single_class(actual, scores, input$scoreplot_class_decouv, "Training")
+})
+
+output$downloadplotscoreperclassCaro_decouv <- downloadHandler(
+  filename = function() { paste0("score_plot_", input$scoreplot_class_decouv, "_train.", input$paramdownplot) },
+  content = function(file) {
+    actual <- MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+    scores <- as.matrix(MODEL()$DATALEARNINGMODEL$reslearningmodel[,
+                                                                   2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel) - 1)])
+    colnames(scores) <- sub("^score_|^Prob_", "", colnames(scores))
+    ggsave(file, plot = score_plot_single_class(actual, scores,
+                                                input$scoreplot_class_decouv, "Training"),
+           device = input$paramdownplot, width = 7, height = 6)
+  }, contentType = NA)
+
+# ── Score plot carrousel (Validation) ─────────────────────────────────────────
+output$scoreplot_carousel_val <- renderPlot({
+  req(MODEL(), MODEL()$DATAVALIDATIONMODEL, YOUDEN_THRESHOLDS())
+  actual  <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+  scores  <- as.matrix(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel[,
+                                                                      2:(ncol(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel) - 1)])
+  colnames(scores) <- sub("^score_|^Prob_", "", colnames(scores))
+  classes <- levels(actual)
+  req(length(classes) > 0)
+  idx <- ((carousel_idx_val() - 1) %% length(classes)) + 1
+  cl  <- classes[idx]
+  req(nchar(cl) > 0)
+  thresh <- YOUDEN_THRESHOLDS()[cl]
+  score_plot_single_class(actual, scores, cl,
+                          set_name = "Validation", threshold = thresh)
+})
+
+output$scoreplot_select_val <- renderPlot({
+  req(MODEL(), MODEL()$DATAVALIDATIONMODEL,
+      input$scoreplot_class_val, YOUDEN_THRESHOLDS())
+  actual  <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+  scores  <- as.matrix(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel[,
+                                                                      2:(ncol(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel) - 1)])
+  colnames(scores) <- sub("^score_|^Prob_", "", colnames(scores))
+  thresh <- YOUDEN_THRESHOLDS()[input$scoreplot_class_val]
+  score_plot_single_class(actual, scores, input$scoreplot_class_val,
+                          set_name = "Validation", threshold = thresh)
+})
+
+output$carousel_class_label_val <- renderText({
+  req(MODEL(), MODEL()$DATAVALIDATIONMODEL)
+  actual  <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+  classes <- levels(actual)
+  n <- length(classes)
+  cl <- classes[((input$carousel_idx_val - 1) %% n) + 1]
+  paste0("Class ", ((input$carousel_idx_val - 1) %% n) + 1, " / ", n, " : ", cl)
+})
+
+# ── Score plot sélection groupe (Validation) ──────────────────────────────────
+output$scoreplot_select_ui_val <- renderUI({
+  req(MODEL(), MODEL()$DATAVALIDATIONMODEL)
+  actual  <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+  classes <- levels(actual)
+  selectInput("scoreplot_class_val", "Select class (vs Rest):",
+              choices = classes, selected = classes[1])
+})
+
+output$downloadplotscoreperclassCaro_val <- downloadHandler(
+  filename = function() { paste0("score_plot_", input$scoreplot_class_val, "_val.", input$paramdownplot) },
+  content = function(file) {
+    actual <- MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval
+    scores <- as.matrix(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel[,2:(ncol(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel) - 1)])
+    colnames(scores) <- sub("^score_|^Prob_", "", colnames(scores))
+    thresh <- YOUDEN_THRESHOLDS()[input$scoreplot_class_val]
+    ggsave(file, plot = score_plot_single_class(actual, scores,
+                                                input$scoreplot_class_val, "Validation",
+                                                threshold = thresh),
+           device = input$paramdownplot, width = 7, height = 6)
+  }, contentType = NA)
+
+
 # output$plotmodelvalbp <- renderPlot({
 #   datavalidationmodel<-MODEL()$DATAVALIDATIONMODEL
 #   scoremodelplot(class = datavalidationmodel$resvalidationmodel$classval ,score =datavalidationmodel$resvalidationmodel$scoreval,names=rownames(datavalidationmodel$resvalidationmodel),
@@ -2875,54 +3233,11 @@ TESTPARAMETERS <- eventReactive(input$tunetest, {
                         "thresholdFC"=input$thresholdFCtest,
                         "model"=input$modeltest,
                         "thresholdmodel"=0,"fs"=as.logical(input$fstest),
-                        "threshold_method"=input$threshold_method_test, 
                         "tuning_method"=input$tuning_method_test)
     length(listparameters$prctvalues)
     validate(need( sum(do.call(rbind, lapply(listparameters, FUN=function(x){length(x)==0})))==0,"One of the parameters is empty"))
     tabparameters<<-constructparameters(listparameters)
-    # Set initial thresholds for probabilistic models
-    # Note: If threshold_method != "fixed", these values will be recalculated
-    # in testparametersfunction(). The 0.5 here serves as:
-    # - Final threshold if threshold_method = "fixed" (default for probabilistic models)
-    # - Initial placeholder if threshold_method = "youden" or "equiprob" (will be optimized)
-    
-    if(input$threshold_method_test == "fixed"){
-      # No optimization: 0.5 is the final threshold for probabilistic models
-      cat("✓ Using fixed thresholds: 0.5 for probabilistic models, 0 for SVM\n")
-    } else if(input$threshold_method_test == "youden"){
-      # Youden optimization enabled: 0.5 is a placeholder, will be recalculated
-      cat("✓ Threshold optimization enabled: Youden method (maximize sensitivity + specificity)\n")
-      cat("  Initial threshold: 0.5 (placeholder, will be optimized)\n")
-      cat("\n")
-      cat("⚠️  IMPORTANT NOTE about threshold optimization in Test Parameters:\n")
-      cat("   - The threshold is optimized on TRAINING data for each parameter combination\n")
-      cat("   - This is CORRECT methodology: fit threshold on train, apply to validation\n")
-      cat("   - However, when comparing many combinations, the best validation result may be\n")
-      cat("     slightly optimistic due to multiple testing (similar to hyperparameter tuning)\n")
-      cat("   - Recommendation: Use these results to SELECT the best configuration,\n")
-      cat("     then RE-VALIDATE on independent test data if available\n")
-      cat("\n")
-    } else if(input$threshold_method_test == "equiprob"){
-      # Equiprobability optimization enabled: 0.5 is a placeholder, will be recalculated
-      cat("✓ Threshold optimization enabled: Equiprobability method (minimize |FP-FN|)\n")
-      cat("  Initial threshold: 0.5 (placeholder, will be optimized)\n")
-      cat("\n")
-      cat("⚠️  IMPORTANT NOTE about threshold optimization in Test Parameters:\n")
-      cat("   - The threshold is optimized on TRAINING data for each parameter combination\n")
-      cat("   - This is CORRECT methodology: fit threshold on train, apply to validation\n")
-      cat("   - However, when comparing many combinations, the best validation result may be\n")
-      cat("     slightly optimistic due to multiple testing (similar to hyperparameter tuning)\n")
-      cat("   - Recommendation: Use these results to SELECT the best configuration,\n")
-      cat("     then RE-VALIDATE on independent test data if available\n")
-      cat("\n")
-    }
-    
-    tabparameters$thresholdmodel[which(tabparameters$model=="randomforest")]<-0.5
-    tabparameters$thresholdmodel[which(tabparameters$model=="elasticnet")]<-0.5
-    tabparameters$thresholdmodel[which(tabparameters$model=="xgboost")]<-0.5
-    tabparameters$thresholdmodel[which(tabparameters$model=="lightgbm")]<-0.5
-    tabparameters$thresholdmodel[which(tabparameters$model=="knn")]<-0.5
-    tabparameters$thresholdmodel[which(tabparameters$model=="naivebayes")]<-0.5
+    tabparameters$thresholdmodel <- 0
     
     validation<<-DATA()$VALIDATION
     learning<<-DATA()$LEARNING
@@ -3740,11 +4055,11 @@ output$download_pca_combined <- downloadHandler(
   }
 )
 
-}) 
+
 # =============================================================================
 # BORUTA SELECTION OUTPUTS
 # =============================================================================
-output <- renderText({
+output$boruta_n_features <- renderText({
   boruta_res <- TEST()
   if(!is.null(boruta_res)){
     length(boruta_res)
@@ -3753,25 +4068,25 @@ output <- renderText({
   }
 })
 
-output <- renderText({
-  boruta_res <- TEST()
-  if(!is.null(boruta_res)){
-    length(boruta_res)
-  } else {
-    0
-  }
-})
+# output$boruta_n_confirmed <- renderText({
+#   boruta_res <- TEST()
+#   if(!is.null(boruta_res)){
+#     length(boruta_res)
+#   } else {
+#     0
+#   }
+# })
 
-output <- renderText({
-  boruta_res <- TEST()
-  if(!is.null(boruta_res)){
-    length(boruta_res)
-  } else {
-    0
-  }
-})
+# output$boruta_n_tentative <- renderText({
+#   boruta_res <- TEST()
+#   if(!is.null(boruta_res)){
+#     length(boruta_res)
+#   } else {
+#     0
+#   }
+# })
 
-output <- renderText({
+output$boruta_score <- renderText({
   boruta_res <- TEST()
   if(!is.null(boruta_res)){
     round(boruta_res, 4)
@@ -3780,13 +4095,13 @@ output <- renderText({
   }
 })
 
-output <- renderPlot({
-  boruta_res <- TEST()
-  req(boruta_res)
-  boruta_importance_plot(boruta_res, graph = TRUE)
-})
+# output$boruta_importance_plot  <- renderPlot({
+#   boruta_res <- TEST()
+#   req(boruta_res)
+#   boruta_importance_plot(boruta_res, graph = TRUE)
+# })
 
-output <- downloadHandler(
+output$download_boruta_plot  <- downloadHandler(
   filename = function() { paste('boruta_importance_plot', '.', input, sep='') },
   content = function(file) {
     boruta_res <- TEST()
@@ -3798,7 +4113,7 @@ output <- downloadHandler(
   }
 )
 
-output <- downloadHandler(
+output$download_boruta_data <- downloadHandler(
   filename = function() { paste('boruta_importance_data', '.', input, sep='') },
   content = function(file) {
     boruta_res <- TEST()
@@ -3808,7 +4123,7 @@ output <- downloadHandler(
   }
 )
 
-output <- renderDataTable({
+output$boruta_table <- renderDataTable({
   boruta_res <- TEST()
   if(!is.null(boruta_res) && nrow(boruta_res) > 0){
     datatable(boruta_res,
@@ -3818,3 +4133,97 @@ output <- renderDataTable({
     data.frame()
   }
 })
+
+YOUDEN_THRESHOLDS <- reactive({
+  req(MODEL())
+  actual <- MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning
+  scores <- as.matrix(MODEL()$DATALEARNINGMODEL$reslearningmodel[,
+                                                                 2:(ncol(MODEL()$DATALEARNINGMODEL$reslearningmodel) - 1)])
+  colnames(scores) <- sub("^score_|^Prob_", "", colnames(scores))
+  compute_youden_thresholds(actual, scores)
+})
+
+# =============================================================================
+# LEARNING CURVE OUTPUTS
+# =============================================================================
+
+LEARNING_CURVE_DATA <- eventReactive(input$run_learning_curve, {
+  req(MODEL())
+  learningmodel   <- MODEL()$DATALEARNINGMODEL$learningmodel
+  modelparameters <- MODEL()$modelparameters
+  req(learningmodel, modelparameters)
+  
+  # Récupérer les paramètres UI
+  size_min_pct <- input$lc_size_min / 100   
+  n_steps      <- input$lc_n_steps          
+  
+  # Construire la séquence de tailles : de size_min_pct à 1.0, avec n_steps points
+  train_sizes <- seq(size_min_pct, 1.0, length.out = max(n_steps, 2))
+  
+  cat(sprintf("[LEARNING_CURVE_DATA] size_min=%.0f%%, n_steps=%d, séquence: %s\n",
+              size_min_pct * 100, n_steps,
+              paste(round(train_sizes, 2), collapse = " ")))
+  
+  lc_data <- learning_curve_multiclass(
+    learningmodel   = learningmodel,
+    modelparameters = modelparameters,
+    train_sizes     = train_sizes,
+    n_folds         = 5
+  )
+  cat("[LEARNING_CURVE_DATA] Done. Rows:", nrow(lc_data), "\n")
+  lc_data
+}, ignoreNULL = FALSE)
+
+output$plot_lc_auc <- renderPlot({
+  lc_data <- LEARNING_CURVE_DATA()
+  req(lc_data)
+  plot_learning_curve_multiclass(lc_data, metric = "auc", title = "Learning Curve - AUC")
+})
+ 
+output$download_lc_auc <- downloadHandler(
+  filename = function() { paste('learning_curve_auc', '.', input, sep='') },
+  content = function(file) {
+    lc_data <- LEARNING_CURVE_DATA()
+    req(lc_data)
+    p <- plot_learning_curve_multiclass(lc_data, metric = "auc", title = "Learning Curve  AUC")
+    ggsave(file, plot = p, device = input)
+  },
+  contentType = NA
+)
+
+output$plot_lc_accuracy <- renderPlot({
+  lc_data <- LEARNING_CURVE_DATA()
+  req(lc_data)
+  plot_learning_curve_multiclass(lc_data, metric = "accuracy", title = "Learning Curve - Accuracy")
+})
+ 
+output$download_lc_auc <- downloadHandler(
+  filename = function() { paste('learning_curve_accuracy', '.', input, sep='') },
+  content = function(file) {
+    lc_data <- LEARNING_CURVE_DATA()
+    req(lc_data)
+    p <- plot_learning_curve_multiclass(lc_data, metric = "accuracy", title = "Learning Curve  Accuracy")
+    ggsave(file, plot = p, device = input)
+  },
+  contentType = NA
+)
+
+output$table_lc <- renderDataTable({
+  lc_data <- LEARNING_CURVE_DATA()
+  req(lc_data)
+  datatable(lc_data,
+            options = list(orderClasses = FALSE, responsive = FALSE, pageLength = 10),
+            rownames = FALSE)
+})
+
+output$download_lc_data <- downloadHandler(
+  filename = function() { paste('learning_curve_data', '.', input, sep='') },
+  content = function(file) {
+    lc_data <- LEARNING_CURVE_DATA()
+    req(lc_data)
+    write.csv(lc_data, file, row.names = FALSE)
+  }
+)
+
+}) # end shinyServer 
+

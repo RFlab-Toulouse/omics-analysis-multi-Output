@@ -740,6 +740,10 @@ testNAstructure<-function(toto,threshold=0.05,maxvaluesgroupmin=100,minvaluesgro
 
 transformdatafunction<-function(learningselect,structuredfeatures,datastructuresfeatures,transformdataparameters){
   learningtransform<-learningselect
+  
+  # --- paramètres appris sur le train (pour réplication sur validation) ---
+  train_params <- list()
+  
   if(!is.null(structuredfeatures)){
     for(i in 1:ncol(structuredfeatures)){
       learningtransform[which(is.na(structuredfeatures[,i])&learningselect[,1]==as.character(datastructuresfeatures[i,"lessgroup"])),as.character(datastructuresfeatures[i,"names"])]<-0
@@ -748,20 +752,25 @@ transformdatafunction<-function(learningselect,structuredfeatures,datastructures
   if(transformdataparameters$log){ 
     learningtransform[,-1]<-transformationlog(x = learningtransform[,-1]+1,logtype=transformdataparameters$logtype)}
   if(transformdataparameters$arcsin){
+    # on apprend min/max sur le train
+    train_params$arcsin_min <- apply(learningtransform[,-1], 2, min, na.rm=TRUE)
+    train_params$arcsin_max <- apply(learningtransform[,-1], 2, max, na.rm=TRUE)
     learningtransform[,-1]<-apply(X = learningtransform[,-1],MARGIN = 2,FUN = function(x){(x-min(x,na.rm = T))/(max(x,na.rm = T)-min(x,na.rm = T))})
     learningtransform[,-1]<-asin(sqrt(learningtransform[,-1]))
   }
   if(transformdataparameters$standardization){
     learningtransformsd<<-learningtransform
     sdlearningtransform<-apply(X = learningtransform[-1],MARGIN = 2,FUN = sd,na.rm=T)
-    #print('sdlearningtransform')
-    #print(sdlearningtransform)
+    train_params$sd_scale <- sdlearningtransform  # sauvegarde du sd du train
     learningtransform[,-1]<-scale(learningtransform[,-1],center = F,scale=sdlearningtransform)
-    #learningtransform[,-1]<-scale(learningtransform[,-1], center = F, scale = TRUE)
   }
-  learningtransform<-replaceNA(toto=learningtransform,rempNA=transformdataparameters$rempNA,pos=T,NAstructure = F)
   
-  return(learningtransform)
+  # Imputation : on apprend les paramètres sur le train et on les sauvegarde
+  res_imputation <- replaceNA_fit(toto=learningtransform, rempNA=transformdataparameters$rempNA, pos=TRUE, NAstructure=FALSE)
+  learningtransform       <- res_imputation$toto
+  train_params$imputation <- res_imputation$imputation_params
+  
+  return(list(learningtransform=learningtransform, train_params=train_params))
 }
 
 transformationlog<-function(x,logtype){
@@ -844,6 +853,193 @@ replaceNA<-function(toto,rempNA="z",pos=F,NAstructure=F,thresholdstruct=0.05,max
   colnames(toto)<-cnames
   
   return(toto)
+}
+
+# ============================================================================
+# replaceNA_fit : comme replaceNA, mais retourne aussi les paramètres appris
+# sur le train pour pouvoir les appliquer à la validation.
+# ============================================================================
+replaceNA_fit <- function(toto, rempNA="z", pos=FALSE, NAstructure=FALSE,
+                          thresholdstruct=0.05, maxvaluesgroupmin=100, minvaluesgroupmax=0){
+  imputation_params <- list(method=rempNA)
+  
+  if(NAstructure){
+    totoNAstruct <- replaceproptestNA(toto=toto, threshold=thresholdstruct,
+                                      rempNA=rempNA, maxvaluesgroupmin, minvaluesgroupmax)
+    toto[,colnames(totoNAstruct)] <- totoNAstruct
+  }
+  
+  if(rempNA == "none" | sum(is.na(toto))==0){ return(list(toto=toto, imputation_params=imputation_params)) }
+  
+  cnames  <- colnames(toto)
+  class   <- toto[,1]
+  cat_lev <- levels(class)
+  toto    <- as.data.frame(toto[,-1], optional=TRUE)
+  n       <- ncol(toto)
+  
+  if(rempNA == "z"){
+    toto[which(is.na(toto), arr.ind=TRUE)] <- 0
+  }
+  if(rempNA == "moy"){
+    # apprendre les moyennes sur le train
+    col_means <- colMeans(toto, na.rm=TRUE)
+    col_means[is.nan(col_means)] <- 0
+    imputation_params$col_means <- col_means
+    toto <- na.aggregate(toto)
+  }
+  if(rempNA == "moygr"){
+    group_means <- list()
+    for(i in seq_along(cat_lev)){
+      tab <- toto[which(class==cat_lev[i]), , drop=FALSE]
+      gm  <- colMeans(tab, na.rm=TRUE)
+      gm[is.nan(gm)] <- 0
+      group_means[[cat_lev[i]]] <- gm
+      tab <- na.aggregate(tab)
+      toto[which(class==cat_lev[i]),] <- tab
+    }
+    imputation_params$group_means <- group_means
+    toto[which(is.na(toto), arr.ind=TRUE)] <- 0
+  }
+  if(rempNA == "pca"){
+    nindiv <- nrow(toto)
+    prctnacol <- apply(X=toto, MARGIN=2, FUN=function(x){
+      if(sum(!is.na(x))<=0){ x<-rep(0, length=nindiv) } else { x }
+    })
+    pca_res  <- imputePCA(prctnacol, ncp=min(n-1,5), method.cv="Kfold")
+    imputation_params$pca_res    <- pca_res   # objet complet pour predict sur validation
+    imputation_params$train_data <- prctnacol # données train sans NA pour rbind
+    toto <- as.data.frame(pca_res$completeObs)
+    if(pos){ toto[which(toto<0, arr.ind=TRUE)] <- 0 }
+  }
+  if(rempNA == "missforest"){
+    mf_res <- missForest(toto, maxiter=5)
+    imputation_params$mf_res    <- mf_res
+    imputation_params$train_data <- as.data.frame(mf_res$ximp) # train imputé
+    toto <- mf_res$ximp
+    if(pos){ toto[which(toto<0, arr.ind=TRUE)] <- 0 }
+  }
+  
+  toto <- cbind(class, toto)
+  toto[which(is.na(toto), arr.ind=TRUE)] <- 0
+  colnames(toto) <- cnames
+  
+  return(list(toto=toto, imputation_params=imputation_params))
+}
+
+# ============================================================================
+# applyTransformToValidation : applique exactement les mêmes transformations
+# que transformdatafunction sur la validation, en utilisant les paramètres
+# appris sur le train (train_params).
+# ============================================================================
+applyTransformToValidation <- function(validation, transformdataparameters, train_params,
+                                       structuredfeatures=NULL, datastructuresfeatures=NULL){
+  valtransform <- validation
+  
+  # 1. Remplacement NAstructure (même logique que train)
+  if(!is.null(structuredfeatures) && !is.null(datastructuresfeatures)){
+    common_struct <- intersect(colnames(structuredfeatures), colnames(valtransform))
+    for(i in seq_along(common_struct)){
+      feat <- common_struct[i]
+      lessgroup_row <- which(datastructuresfeatures[,"names"] == feat)
+      if(length(lessgroup_row)>0){
+        lessgroup <- as.character(datastructuresfeatures[lessgroup_row,"lessgroup"])
+        na_idx <- which(is.na(valtransform[, feat]) & valtransform[,1]==lessgroup)
+        if(length(na_idx)>0) valtransform[na_idx, feat] <- 0
+      }
+    }
+  }
+  
+  # 2. Log
+  if(transformdataparameters$log){
+    valtransform[,-1] <- transformationlog(x=valtransform[,-1]+1, logtype=transformdataparameters$logtype)
+  }
+  
+  # 3. Arcsin — utiliser les min/max du train
+  if(transformdataparameters$arcsin){
+    arcsin_min <- train_params$arcsin_min
+    arcsin_max <- train_params$arcsin_max
+    for(col in names(arcsin_min)){
+      if(col %in% colnames(valtransform)){
+        rng <- arcsin_max[col] - arcsin_min[col]
+        if(rng == 0) rng <- 1
+        valtransform[, col] <- (valtransform[, col] - arcsin_min[col]) / rng
+        valtransform[, col] <- asin(sqrt(pmax(0, pmin(1, valtransform[, col]))))
+      }
+    }
+  }
+  
+  # 4. Standardisation — utiliser le sd du train
+  if(transformdataparameters$standardization && !is.null(train_params$sd_scale)){
+    sd_train <- train_params$sd_scale
+    common_cols <- intersect(names(sd_train), colnames(valtransform)[-1])
+    sd_use <- sd_train[common_cols]
+    sd_use[sd_use == 0] <- 1
+    valtransform[, common_cols] <- scale(valtransform[, common_cols, drop=FALSE], center=FALSE, scale=sd_use)
+  }
+  
+  # 5. Imputation — utiliser les paramètres appris sur le train
+  imp <- train_params$imputation
+  rempNA <- imp$method
+  
+  if(!is.null(rempNA) && rempNA != "none" && sum(is.na(valtransform)) > 0){
+    cnames <- colnames(valtransform)
+    class  <- valtransform[,1]
+    toto   <- as.data.frame(valtransform[,-1], optional=TRUE)
+    
+    if(rempNA == "z"){
+      toto[which(is.na(toto), arr.ind=TRUE)] <- 0
+    }
+    if(rempNA == "moy"){
+      col_means <- imp$col_means
+      for(col in colnames(toto)){
+        na_idx <- which(is.na(toto[,col]))
+        if(length(na_idx)>0 && col %in% names(col_means)){
+          toto[na_idx, col] <- col_means[col]
+        }
+      }
+    }
+    if(rempNA == "moygr"){
+      cat_lev     <- levels(class)
+      group_means <- imp$group_means
+      for(grp in cat_lev){
+        if(!grp %in% names(group_means)) next
+        gm      <- group_means[[grp]]
+        grp_idx <- which(class == grp)
+        for(col in colnames(toto)){
+          na_idx <- intersect(which(is.na(toto[,col])), grp_idx)
+          if(length(na_idx)>0 && col %in% names(gm)){
+            toto[na_idx, col] <- gm[col]
+          }
+        }
+      }
+      toto[which(is.na(toto), arr.ind=TRUE)] <- 0
+    }
+    if(rempNA == "pca"){
+      # On combine train (sans NA) + validation et on garde seulement les lignes validation
+      train_data <- imp$train_data
+      common_cols_pca <- intersect(colnames(train_data), colnames(toto))
+      combined <- rbind(train_data[, common_cols_pca], toto[, common_cols_pca])
+      res_pca  <- imputePCA(combined, ncp=min(ncol(combined)-1, 5), method.cv="Kfold")
+      toto_imp <- as.data.frame(res_pca$completeObs)
+      toto[, common_cols_pca] <- toto_imp[(nrow(train_data)+1):nrow(combined), ]
+      toto[which(toto<0, arr.ind=TRUE)] <- 0
+    }
+    if(rempNA == "missforest"){
+      train_data <- imp$train_data
+      common_cols_mf <- intersect(colnames(train_data), colnames(toto))
+      combined <- rbind(train_data[, common_cols_mf], toto[, common_cols_mf])
+      res_mf   <- missForest(combined, maxiter=5)
+      toto_imp <- res_mf$ximp
+      toto[, common_cols_mf] <- toto_imp[(nrow(train_data)+1):nrow(combined), ]
+      toto[which(toto<0, arr.ind=TRUE)] <- 0
+    }
+    
+    valtransform <- cbind(class, toto)
+    valtransform[which(is.na(valtransform), arr.ind=TRUE)] <- 0
+    colnames(valtransform) <- cnames
+  }
+  
+  return(valtransform)
 }
 
 mdsplot<-function(toto,ggplot=T,maintitle="MDS representation of the individuals",graph=T){
@@ -1541,16 +1737,36 @@ multivariateselection<-function(toto, method="lasso", lambda=NULL, alpha=0.5, nl
     y_glmnet <- y
   }
   
+
+  # Guards before cv.glmnet
+  if(ncol(x) == 0 || nrow(x) == 0){
+    cat("[multivariateselection] ERROR: x has no rows or columns.\n")
+    return(list(results = data.frame(), selected_vars = character(0), error = "No features available"))
+  }
+  if(nlevels(y_glmnet) < 2){
+    cat("[multivariateselection] ERROR: fewer than 2 classes after merging, returning all variables.\n")
+    return(list(results = data.frame(), selected_vars = colnames(x), error = "Only one class after merging"))
+  }
+  safe_nfolds <- max(2, min(3, min(table(y_glmnet))))
+
   # Perform cross-validation to find optimal lambda if not provided
   if(is.null(lambda)){
     set.seed(20011203)
     cat("Dans la section glmnet : \n")
     print(table(y_glmnet))
-    cvfit <- cv.glmnet(x, y_glmnet, family="multinomial",
-                       alpha=alpha, nlambda=nlambda,
-                       type.measure="class", nfolds = 3,
-                         #min(5, nrow(toto)-1),
-                       type.multinomial = "grouped")
+    cvfit <- tryCatch({
+      suppressWarnings(cv.glmnet(x, y_glmnet, family="multinomial",
+                                 alpha=alpha, nlambda=nlambda,
+                                 type.measure="class", nfolds=safe_nfolds,
+                                 type.multinomial="ungrouped"))
+    }, error = function(e){
+      cat(sprintf("[multivariateselection] cv.glmnet failed: %s\n", e$message))
+      return(NULL)
+    })
+    if(is.null(cvfit)){
+      return(list(results=data.frame(), selected_vars=colnames(x),
+                  error="cv.glmnet failed, returning all variables"))
+    }
     lambda <- cvfit$lambda.min
     lambda_1se <- cvfit$lambda.1se
   } else {
@@ -2623,8 +2839,8 @@ compute_multiclass_auc <- function(actual, score_matrix) {
   auc_weighted <- sum(auc_values * weights, na.rm = TRUE)
   
   return(list(
-    auc_macro = round(auc_macro, 3),
-    auc_weighted = round(auc_weighted, 3),
+    auc_macro = round(auc_macro, 4),
+    auc_weighted = round(auc_weighted, 4),
     auc_per_class = auc_values
   ))
 }
@@ -3824,7 +4040,7 @@ create_stratified_folds <- function(y, k = 5, seed = 20011203) {
 
 modelfunction <- function(learningmodel, validation, modelparameters, 
                           transformdataparameters, datastructuresfeatures, 
-                          learningselect = NULL) {
+                          learningselect = NULL, train_params = NULL) {
   if(modelparameters$modeltype!="nomodel"){ 
     # colnames(learningmodel)[1]<-"group"
     # Définir les groupes/niveaux
@@ -4227,11 +4443,12 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         # Perform cross-validation
         cat("  Performing cross-validation for lambda...\n")
         set.seed(20011203)
-        cvfit <- cv.glmnet(x, y, 
+        cvfit <- suppressWarnings(cv.glmnet(x, y, 
                            family = family_param, 
                            alpha = alpha_param,
                            type.measure = type_measure, 
-                           nfolds = min(10, nrow(learningmodel)-1))
+                           nfolds = 5 #min(5, nrow(learningmodel)-1)
+                           ))
         lambda_param <- cvfit$lambda.min
         model <- list(glmnet_model = cvfit, 
                       lambda = lambda_param, 
@@ -4282,11 +4499,11 @@ modelfunction <- function(learningmodel, validation, modelparameters,
           
           # Refit model with selected features
           if(is.null(modelparameters$lambda)){
-            cvfit <- cv.glmnet(x, y, 
-                               family = family_param, 
-                               alpha = alpha_param,
-                               type.measure = type_measure, 
-                               nfolds = min(10, nrow(learningmodel)-1))
+            cvfit <-  suppressWarnings(cv.glmnet(x, y, 
+                                                 family = family_param, 
+                                                 alpha = alpha_param,
+                                                 type.measure = type_measure, 
+                                                 nfolds = min(5, nrow(learningmodel)-1))) 
             lambda_param <- cvfit$lambda.min
             fit <- glmnet(x, y, 
                           family = family_param, 
@@ -4994,51 +5211,60 @@ modelfunction <- function(learningmodel, validation, modelparameters,
     if(!is.null(validation)){
       cat("\n=== Processing validation data ===\n")
       
-      # Transform validation data
-      validationmodel <- validation
+      # Appliquer exactement les mêmes transformations que sur le train,
+      # avec les paramètres appris sur le train (pas de data leakage).
+      if(!is.null(train_params)){
+        validationmodel <- applyTransformToValidation(
+          validation            = validation,
+          transformdataparameters = transformdataparameters,
+          train_params          = train_params,
+          structuredfeatures    = NULL,
+          datastructuresfeatures = datastructuresfeatures
+        )
+      } else {
+        # Fallback si train_params non fourni (compatibilité ascendante)
+        validationmodel <- validation
+        colnames(validationmodel)[1] <- "group"
+        validationmodel[,1] <- as.factor(as.character(validationmodel[,1]))
+        if(transformdataparameters$rempNA == "0"){
+          validationmodel[,-1][is.na(validationmodel[,-1])] <- 0
+        } else if(transformdataparameters$rempNA %in% c("pca", "missforest")){
+          if(!is.null(datastructuresfeatures) && ncol(datastructuresfeatures) > 0){
+            validationdatastructuresfeatures <- validation[, colnames(datastructuresfeatures)]
+            validationdatastructuresfeatures[is.na(validationdatastructuresfeatures)] <- 0
+            learningselectfull <- cbind(learningselect, datastructuresfeatures)
+            validationselectfull <- cbind(validation, validationdatastructuresfeatures)
+            if(transformdataparameters$rempNA == "pca"){
+              res <- imputePCA(X = rbind(learningselectfull, validationselectfull)[,-1],
+                               ncp = min(3, ncol(learningselectfull)-2))
+              validationmodel <- cbind(validationselectfull[,1],
+                                       res$completeObs[(nrow(learningselectfull)+1):nrow(rbind(learningselectfull, validationselectfull)),])
+            } else if(transformdataparameters$rempNA == "missforest"){
+              res <- missForest(xmis = rbind(learningselectfull, validationselectfull)[,-1])
+              validationmodel <- cbind(validationselectfull[,1],
+                                       res$ximp[(nrow(learningselectfull)+1):nrow(rbind(learningselectfull, validationselectfull)),])
+            }
+          } else {
+            validationmodel[,-1][is.na(validationmodel[,-1])] <- 0
+          }
+        }
+        if(transformdataparameters$log){
+          if(transformdataparameters$logtype == "log2"){
+            validationmodel[,-1] <- log2(validationmodel[,-1] + 1)
+          } else {
+            validationmodel[,-1] <- log(validationmodel[,-1] + 1)
+          }
+        }
+        if(transformdataparameters$arcsin){
+          validationmodel[,-1] <- asin(sqrt(validationmodel[,-1]))
+        }
+        if(transformdataparameters$standardization){
+          validationmodel[,-1] <- scale(validationmodel[,-1])
+        }
+      }
+      
       colnames(validationmodel)[1] <- "group"
       validationmodel[,1] <- as.factor(as.character(validationmodel[,1]))
-      
-      # Apply transformations
-      if(transformdataparameters$rempNA == "0"){
-        validationmodel[,-1][is.na(validationmodel[,-1])] <- 0
-      } else if(transformdataparameters$rempNA %in% c("pca", "missforest")){
-        # Complex imputation for validation
-        if(!is.null(datastructuresfeatures) && ncol(datastructuresfeatures) > 0){
-          validationdatastructuresfeatures <- validation[, colnames(datastructuresfeatures)]
-          validationdatastructuresfeatures[is.na(validationdatastructuresfeatures)] <- 0
-          learningselectfull <- cbind(learningselect, datastructuresfeatures)
-          validationselectfull <- cbind(validation, validationdatastructuresfeatures)
-          
-          if(transformdataparameters$rempNA == "pca"){
-            res <- imputePCA(X = rbind(learningselectfull, validationselectfull)[,-1], 
-                             ncp = min(3, ncol(learningselectfull)-2))
-            validationmodel <- cbind(validationselectfull[,1], 
-                                     res$completeObs[(nrow(learningselectfull)+1):nrow(rbind(learningselectfull, validationselectfull)),])
-          } else if(transformdataparameters$rempNA == "missforest"){
-            res <- missForest(xmis = rbind(learningselectfull, validationselectfull)[,-1])
-            validationmodel <- cbind(validationselectfull[,1], 
-                                     res$ximp[(nrow(learningselectfull)+1):nrow(rbind(learningselectfull, validationselectfull)),])
-          }
-        } else {
-          validationmodel[,-1][is.na(validationmodel[,-1])] <- 0
-        }
-      }
-      
-      # Apply other transformations
-      if(transformdataparameters$log){
-        if(transformdataparameters$logtype == "log2"){
-          validationmodel[,-1] <- log2(validationmodel[,-1] + 1)
-        } else {
-          validationmodel[,-1] <- log(validationmodel[,-1] + 1)
-        }
-      }
-      if(transformdataparameters$arcsin){
-        validationmodel[,-1] <- asin(sqrt(validationmodel[,-1]))
-      }
-      if(transformdataparameters$standardization){
-        validationmodel[,-1] <- scale(validationmodel[,-1])
-      }
       
       classval <- validationmodel[,1]
       
@@ -6856,7 +7082,7 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
       theme_minimal() +
       theme(
         plot.title = element_text(size = 15, face = "bold"),
-        axis.text = element_text(size = 12),
+        axis.text = element_text(size = 12, face = "bold"),
         axis.title = element_text(size = 14, face = "bold"),
         legend.position = c(0.8, 0.2),
         legend.title = element_text(size = 14, face = "bold"),
@@ -7066,7 +7292,7 @@ importancemodelsvm<-function(model,modeltype,tabdiff,criterion){
           tabdiffmodif[,i]<-tabdiffmodif[sample(1:nrow(tabdiff)),i]
           #tabdiffmodif<-tabdiffmodif[,-i]
           
-          resmodeldiff<-svm(y =tabdiffmodif[,1],x=tabdiffmodif[,-1],cross=10,
+          resmodeldiff <- svm(y =tabdiffmodif[,1],x=tabdiffmodif[,-1],cross=10,
                             type ="C-classification",
                             kernel= ifelse(is.null(model$kernel),"radial",model$kernel),
                             cost=model$cost,
@@ -7200,14 +7426,14 @@ multiclass_metrics <- function(predicted, actual, average = "macro") {
   result <- list(
     per_class = data.frame(
       Class = classes,
-      Precision = round(precision_vec, 3),
-      Recall = round(recall_vec, 3),
-      F1_Score = round(f1_vec, 3),
+      Precision = round(precision_vec, 4),
+      Recall = round(recall_vec, 4),
+      F1_Score = round(f1_vec, 4),
       Support = support_vec
     ),
     average = data.frame(
       Metric = c("Accuracy", "Precision", "Recall", "F1-Score"),
-      Value = round(c(accuracy, precision_avg, recall_avg, f1_avg), 3)
+      Value = round(c(accuracy, precision_avg, recall_avg, f1_avg), 4)
     ),
     accuracy = accuracy,
     precision = precision_avg,
@@ -7221,7 +7447,7 @@ multiclass_metrics <- function(predicted, actual, average = "macro") {
 # Fonction pour remplacer sensibility (devient recall macro-average)
 sensitivity_multiclass <- function(predicted, actual) {
   metrics <- multiclass_metrics(predicted, actual, average = "macro")
-  return(round(metrics$recall, 3))
+  return(round(metrics$recall, 4))
 }
 
 
@@ -7348,10 +7574,11 @@ testparametersfunction<-function(learning,validation,tabparameters){
                                    "arcsin"=parameters$arcsin,
                                    "rempNA"=parameters$rempNA)
     
-    learningtransform<-transformdatafunction(learningselect = resselectdata$learningselect,
+    learningtransform_res <- transformdatafunction(learningselect = resselectdata$learningselect,
                                              structuredfeatures = resselectdata$structuredfeatures,
                                              datastructuresfeatures = resselectdata$datastructuresfeatures,
                                              transformdataparameters = transformdataparameters)
+    learningtransform <- learningtransform_res$learningtransform
     
     testparameters<<-list("SFtest"=FALSE,
                           "test"=parameters$test,
@@ -7445,56 +7672,65 @@ testparametersfunction<-function(learning,validation,tabparameters){
       results[i,7]<-NA
       
       # ============================================================================
-      # AUC LEARNING (Multi-classe avec multiclass.roc)
+      # AUC LEARNING (Multi-classe OvR macro)
       # ============================================================================
-      classlearning <- resmodel$datalearningmodel$reslearningmodel$classlearning
-      scorelearning <- resmodel$datalearningmodel$reslearningmodel$scorelearning
-      
-      # Pour multi-classe, scorelearning doit être une matrice (n_samples x n_classes)
-      # multiclass.roc() calcule l'AUC macro (moyenne des AUC one-vs-all)
-      results[i,4] <- round(as.numeric(pROC::auc(pROC::multiclass.roc(
-        classlearning, 
-        scorelearning, 
-        quiet=TRUE
-      ))), digits=3)
+      res_learn     <- resmodel$datalearningmodel$reslearningmodel
+      classlearning <- res_learn$classlearning
+      sc_cols_learn <- grep("^score_|^Prob_", colnames(res_learn), value = TRUE)
+      if(length(sc_cols_learn) > 0){
+        sc_mat_learn <- as.matrix(res_learn[, sc_cols_learn, drop = FALSE])
+        colnames(sc_mat_learn) <- sub("^score_|^Prob_", "", colnames(sc_mat_learn))
+        auc_learn <- tryCatch(
+          compute_multiclass_auc(classlearning, sc_mat_learn)$auc_macro,
+          error = function(e) NA
+        )
+        results[i,4] <- round(auc_learn, digits = 3)
+      } else {
+        results[i,4] <- NA
+      }
       
       # Sensibility learning (macro average)
-      results[i,5]<-sensibility(
+      results[i,5] <- sensitivity_multiclass(
         resmodel$datalearningmodel$reslearningmodel$predictclasslearning,
         resmodel$datalearningmodel$reslearningmodel$classlearning
       )
       
       # Specificity learning (macro average)
-      results[i,6]<-specificity(
+      results[i,6] <- specificity(
         resmodel$datalearningmodel$reslearningmodel$predictclasslearning,
         resmodel$datalearningmodel$reslearningmodel$classlearning
-      )
+      )$macro_average
       
       # ============================================================================
-      # AUC VALIDATION (Multi-classe avec multiclass.roc)
+      # AUC VALIDATION (Multi-classe OvR macro)
       # ============================================================================
       if(!is.null(validation)){
-        classval <- resmodel$datavalidationmodel$resvalidationmodel$classval
-        scoreval <- resmodel$datavalidationmodel$resvalidationmodel$scoreval
-        
-        # Pour multi-classe, scoreval doit être une matrice (n_samples x n_classes)
-        results[i,1] <- round(as.numeric(pROC::auc(pROC::multiclass.roc(
-          classval, 
-          scoreval, 
-          quiet=TRUE
-        ))), digits=3)
+        res_val     <- resmodel$datavalidationmodel$resvalidationmodel
+        classval    <- res_val$classval
+        sc_cols_val <- grep("^score_|^Prob_", colnames(res_val), value = TRUE)
+        if(length(sc_cols_val) > 0){
+          sc_mat_val <- as.matrix(res_val[, sc_cols_val, drop = FALSE])
+          colnames(sc_mat_val) <- sub("^score_|^Prob_", "", colnames(sc_mat_val))
+          auc_val <- tryCatch(
+            compute_multiclass_auc(classval, sc_mat_val)$auc_macro,
+            error = function(e) NA
+          )
+          results[i,1] <- round(auc_val, digits = 3)
+        } else {
+          results[i,1] <- NA
+        }
         
         # Sensibility validation (macro average)
-        results[i,2]<-sensibility(
+        results[i,2] <- sensitivity_multiclass(
           resmodel$datavalidationmodel$resvalidationmodel$predictclassval,
           resmodel$datavalidationmodel$resvalidationmodel$classval
         )
         
         # Specificity validation (macro average)
-        results[i,3]<-specificity(
+        results[i,3] <- specificity(
           resmodel$datavalidationmodel$resvalidationmodel$predictclassval,
           resmodel$datavalidationmodel$resvalidationmodel$classval
-        )
+        )$macro_average
       }
     }
   }
@@ -8062,6 +8298,8 @@ learning_curve_multiclass <- function(learningmodel, modelparameters,
   macro_auc <- function(actual, score_mat) {
     actual <- factor(actual, levels = lev)
     if (is.data.frame(score_mat)) score_mat <- as.matrix(score_mat)
+    # Effectif par classe -> poids pour la moyenne ponderee (weighted macro)
+    counts <- as.numeric(table(actual)[lev])
     aucs <- sapply(lev, function(cls) {
       bin  <- as.integer(actual == cls)
       if (sum(bin) == 0 || sum(bin) == length(bin)) return(NA)
@@ -8072,7 +8310,12 @@ learning_curve_multiclass <- function(learningmodel, modelparameters,
         error = function(e) NA
       )
     })
-    mean(aucs, na.rm = TRUE)
+    # Weighted macro : chaque classe pese proportionnellement a son effectif
+    valid <- !is.na(aucs)
+    if (sum(valid) == 0) return(NA)
+    weighted.mean(aucs[valid], w = counts[valid])
+    #no weihted macro 
+   # mean(aucs, na.rm = TRUE)
   }
   
   # ── helper : accuracy ──────────────────────────────────────────────────────
@@ -8233,34 +8476,43 @@ plot_learning_curve <- function(lc_data, metric = "auc",
   }
   
   if (metric == "auc") {
-    y_train <- lc_data$train_auc
-    y_cv    <- lc_data$cv_auc
-    y_sd    <- lc_data$cv_auc_sd
-    ylab    <- "AUC (macro OvR)"
+    y_train    <- lc_data$train_auc
+    y_train_sd <- if ("train_auc_sd" %in% colnames(lc_data)) lc_data$train_auc_sd else rep(NA, nrow(lc_data))
+    y_cv       <- lc_data$cv_auc
+    y_cv_sd    <- lc_data$cv_auc_sd
+    ylab       <- "AUC (macro OvR)"
   } else {
-    y_train <- lc_data$train_accuracy
-    y_cv    <- lc_data$cv_accuracy
-    y_sd    <- lc_data$cv_accuracy_sd
-    ylab    <- "Accuracy"
+    y_train    <- lc_data$train_accuracy
+    y_train_sd <- if ("train_accuracy_sd" %in% colnames(lc_data)) lc_data$train_accuracy_sd else rep(NA, nrow(lc_data))
+    y_cv       <- lc_data$cv_accuracy
+    y_cv_sd    <- lc_data$cv_accuracy_sd
+    ylab       <- "Accuracy"
   }
   
   x <- lc_data$train_size
   
-  # Données long format pour ggplot
-  df_train <- data.frame(x = x, y = y_train,
-                         ymin = y_train, ymax = y_train,
-                         set = "Training (resubstitution)")
-  df_cv <- data.frame(x = x, y = y_cv,
-                      ymin = ifelse(is.na(y_sd), y_cv, y_cv - y_sd),
-                      ymax = ifelse(is.na(y_sd), y_cv, y_cv + y_sd),
-                      set = "Cross-validation (5-fold)")
+  # Données long format pour ggplot — ribbon mean ± sd pour les deux courbes
+  df_train <- data.frame(
+    x    = x,
+    y    = y_train,
+    ymin = ifelse(is.na(y_train_sd), y_train, pmax(0, y_train - y_train_sd)),
+    ymax = ifelse(is.na(y_train_sd), y_train, pmin(1, y_train + y_train_sd)),
+    set  = "Training (resubstitution)"
+  )
+  df_cv <- data.frame(
+    x    = x,
+    y    = y_cv,
+    ymin = ifelse(is.na(y_cv_sd), y_cv, pmax(0, y_cv - y_cv_sd)),
+    ymax = ifelse(is.na(y_cv_sd), y_cv, pmin(1, y_cv + y_cv_sd)),
+    set  = "Cross-validation (5-fold)"
+  )
   
   df <- rbind(df_train, df_cv)
   df$set <- factor(df$set, levels = c("Training (resubstitution)",
                                       "Cross-validation (5-fold)"))
   
   ggplot(df, aes(x = x, y = y, colour = set, fill = set)) +
-    geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.15, colour = NA) +
+    geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.18, colour = NA) +
     geom_line(size = 1.1) +
     geom_point(size = 2.5) +
     scale_colour_manual(values = c("Training (resubstitution)" = "#E74C3C",
@@ -8275,11 +8527,401 @@ plot_learning_curve <- function(lc_data, metric = "auc",
     theme_bw(base_size = 13) +
     theme(legend.position  = "bottom",
           plot.title       = element_text(size = 18, face = "bold"),
-          axis.text.x =  element_text(size  = 15 , face =  "bold"),
-          axis.text.y =  element_text(size  = 15 , face =  "bold"),
-           axis.title.x  =  element_text(size = 18  , face =  "bold"),
-          axis.title.y = element_text(size = 18  , face = "bold"),
-          
-          legend.text = element_text(size = 15 , face = "bold"),
+          axis.text.x      = element_text(size = 15, face = "bold"),
+          axis.text.y      = element_text(size = 15, face = "bold"),
+          axis.title.x     = element_text(size = 18, face = "bold"),
+          axis.title.y     = element_text(size = 18, face = "bold"),
+          legend.text      = element_text(size = 15, face = "bold"),
           panel.grid.minor = element_blank())
+}
+
+plot_learning_curve_multiclass <- function(lc_data, metric = "auc", title = NULL) {
+  
+  stopifnot(metric %in% c("auc", "accuracy"))
+  
+  # Noms de colonnes du format multi-classe (global.R)
+  train_col    <- if (metric == "auc") "train_auc"       else "train_accuracy"
+  cv_col       <- if (metric == "auc") "cv_auc"          else "cv_accuracy"
+  train_sd_col <- if (metric == "auc") "train_auc_sd"    else "train_accuracy_sd"
+  cv_sd_col    <- if (metric == "auc") "cv_auc_sd"       else "cv_accuracy_sd"
+  y_label      <- if (metric == "auc") "AUC (macro OvR)" else "Accuracy"
+  if (is.null(title)) title <- paste("Learning Curve —", y_label)
+  
+  # Le format multi-classe a déjà une ligne par train_size avec SD précalculés
+  # → pas besoin d'agréger, on construit directement agg
+  agg <- lc_data %>%
+    dplyr::mutate(
+      mean_train = .data[[train_col]],
+      sd_train   = if (train_sd_col %in% names(lc_data)) .data[[train_sd_col]] else NA_real_,
+      mean_cv    = .data[[cv_col]],
+      sd_cv      = if (cv_sd_col    %in% names(lc_data)) .data[[cv_sd_col]]    else NA_real_,
+      size_pct   = paste0(round(train_size_pct), "%")   # colonne train_size_pct en % (ex: 20.0)
+    ) %>%
+    dplyr::arrange(train_size)
+  
+  # Fixer l'ordre des labels sur l'axe X
+  agg$size_pct <- factor(agg$size_pct, levels = unique(agg$size_pct))
+  
+  # Remplacer NA dans les SD par 0 pour que le ribbon soit plat (pas d'erreur ggplot)
+  agg <- agg %>%
+    dplyr::mutate(
+      sd_train = ifelse(is.na(sd_train), 0, sd_train),
+      sd_cv    = ifelse(is.na(sd_cv),    0, sd_cv),
+      # Contraindre le ribbon entre 0 et 1
+      train_lo = pmax(0, mean_train - sd_train),
+      train_hi = pmin(1, mean_train + sd_train),
+      cv_lo    = pmax(0, mean_cv    - sd_cv),
+      cv_hi    = pmin(1, mean_cv    + sd_cv)
+    )
+  
+  ggplot(agg, aes(x = size_pct)) +
+    geom_ribbon(aes(ymin = train_lo, ymax = train_hi, group = 1),
+                fill = "#2980B9", alpha = 0.15) +
+    geom_ribbon(aes(ymin = cv_lo,    ymax = cv_hi,    group = 1),
+                fill = "#E74C3C", alpha = 0.15) +
+    geom_line(aes(y = mean_train, colour = "Training",  group = 1), linewidth = 1.1) +
+    geom_point(aes(y = mean_train, colour = "Training"), size = 2.5) +
+    geom_line(aes(y = mean_cv,    colour = "Cross-val", group = 1), linewidth = 1.1) +
+    geom_point(aes(y = mean_cv,   colour = "Cross-val"), size = 2.5) +
+    scale_colour_manual(values = c("Training"  = "#2980B9",
+                                   "Cross-val" = "#E74C3C")) +
+    # scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.1)) +
+    labs(title  = title,
+         x      = "Training set size",
+         y      = y_label,
+         colour = NULL) +
+    theme_minimal(base_size = 13) +
+    theme(
+      plot.title      = element_text(size = 15, face = "bold"),
+      axis.text       = element_text(size = 14, face = "bold"),
+      axis.text.x     = element_text(angle = 0),
+      axis.title      = element_text(size = 13, face = "bold"),
+      legend.text       = element_text(size = 14, face = "bold"),
+      legend.position = "top"
+    )
+}
+# =============================================================================
+# SCORE PLOT PER CLASS (One-vs-Rest) — Sensibilité & Spécificité
+# =============================================================================
+# score_plot_per_class <- function(actual, scores, set_name = "Training") {
+#   # actual : factor, scores : matrix (n x K) avec colnames = niveaux
+#   classes <- levels(actual)
+#   n_classes <- length(classes)
+#   
+#   plot_list <- list()
+#   
+#   for (cl in classes) {
+#     binary_label <- factor(ifelse(as.character(actual) == cl, cl, "Rest"),
+#                            levels = c(cl, "Rest"))
+#     score_cl <- scores[, cl]
+#     
+#     df <- data.frame(
+#       score = score_cl,
+#       label = binary_label
+#     )
+#     
+#     # Calculer seuil de Youden
+#     roc_obj <- tryCatch(pROC::roc(binary_label, score_cl, quiet = TRUE,
+#                                   levels = c("Rest", cl), direction = "<"),
+#                         error = function(e) NULL)
+#     
+#     youden_thresh <- 0.5
+#     sens_val <- NA; spec_val <- NA; auc_val <- NA
+#     if (!is.null(roc_obj)) {
+#       coords_youden <- pROC::coords(roc_obj, "best", ret = c("threshold","sensitivity","specificity"), 
+#                                     best.method = "youden", transpose = FALSE)
+#       if (nrow(coords_youden) > 0) {
+#         youden_thresh <- coords_youden$threshold[1]
+#         sens_val      <- round(coords_youden$sensitivity[1], 3)
+#         spec_val      <- round(coords_youden$specificity[1], 3)
+#       }
+#       auc_val <- round(as.numeric(pROC::auc(roc_obj)), 3)
+#     }
+#     
+#     subtitle_txt <- paste0("AUC=", ifelse(is.na(auc_val), "NA", auc_val),
+#                            "  |  Sens=", ifelse(is.na(sens_val), "NA", sens_val),
+#                            "  |  Spec=", ifelse(is.na(spec_val), "NA", spec_val),
+#                            "  (Youden seuil=", round(youden_thresh, 3), ")")
+#     
+#     p <- ggplot(df, aes(x = seq_len(nrow(df)), y = score, colour = label)) +
+#       geom_point(size = 2, alpha = 0.8) +
+#       geom_hline(yintercept = youden_thresh, linetype = "dashed",
+#                  colour = "black", linewidth = 0.8) +
+#       scale_colour_manual(values = setNames(c("#E74C3C", "#95A5A6"), c(cl, "Rest"))) +
+#       labs(title    = paste0(set_name, " — ", cl, " vs Rest"),
+#            subtitle = subtitle_txt,
+#            x = "Individuals", y = "Score (probability)",
+#            colour = NULL) +
+#       ylim(0, 1) +
+#       theme_bw(base_size = 12) +
+#       theme(legend.position   = "bottom",
+#             plot.title        = element_text(size = 14, face = "bold"),
+#             plot.subtitle     = element_text(size = 11),
+#             axis.text         = element_text(size = 11, face = "bold"),
+#             axis.title        = element_text(size = 12, face = "bold"),
+#             panel.grid.minor  = element_blank())
+#     
+#     plot_list[[cl]] <- p
+#   }
+#   
+#   # Assembler en grille
+#   n_cols <- min(3, n_classes)
+#   n_rows <- ceiling(n_classes / n_cols)
+#   
+#   gridExtra::arrangeGrob(grobs = plot_list,
+#                          ncol = n_cols, nrow = n_rows,
+#                          top = grid::textGrob(
+#                            paste0("Score plots per class (One-vs-Rest) — ", set_name),
+#                            gp = grid::gpar(fontsize = 16, fontface = "bold")
+#                          ))
+# }
+
+score_plot_per_class <- function(actual, scores, set_name = "Training", thresholds = NULL) {
+  classes   <- levels(actual)
+  n_classes <- length(classes)
+  plot_list <- list()
+  
+  for (cl in classes) {
+    binary_label <- factor(ifelse(as.character(actual) == cl, cl, "Rest"),
+                           levels = c(cl, "Rest"))
+    score_cl <- scores[, cl]
+    
+    roc_obj <- tryCatch(
+      pROC::roc(binary_label, score_cl, quiet = TRUE,
+                levels = c("Rest", cl), direction = "<"),
+      error = function(e) NULL)
+    
+    youden_thresh <- 0.5
+    sens_val <- NA; spec_val <- NA; auc_val <- NA
+    
+    if (is.null(thresholds) || is.null(thresholds[cl]) || is.na(thresholds[cl])) {
+      # Mode Train : estimer le seuil de Youden sur ces données
+      if (!is.null(roc_obj)) {
+        coords_y <- pROC::coords(roc_obj, "best",
+                                 ret = c("threshold", "sensitivity", "specificity"),
+                                 best.method = "youden", transpose = FALSE)
+        if (nrow(coords_y) > 0) {
+          youden_thresh <- coords_y$threshold[1]
+          sens_val      <- round(coords_y$sensitivity[1], 4)
+          spec_val      <- round(coords_y$specificity[1], 4)
+        }
+      }
+    } else {
+      # Mode Validation : seuil fourni depuis le train
+      youden_thresh <- thresholds[cl]
+      if (!is.null(roc_obj)) {
+        coords_y <- tryCatch(
+          pROC::coords(roc_obj, x = youden_thresh,
+                       ret = c("sensitivity", "specificity"),
+                       transpose = FALSE),
+          error = function(e) NULL)
+        if (!is.null(coords_y) && nrow(coords_y) > 0) {
+          sens_val <- round(coords_y$sensitivity[1], 4)
+          spec_val <- round(coords_y$specificity[1], 4)
+        }
+      }
+    }
+    
+    if (!is.null(roc_obj)) {
+      auc_val <- round(as.numeric(pROC::auc(roc_obj)), 4)
+    }
+    
+    df <- data.frame(score = score_cl, label = binary_label)
+    
+    subtitle_txt <- paste0(
+      "AUC=", ifelse(is.na(auc_val), "NA", auc_val),
+      "  |  Sens=", ifelse(is.na(sens_val), "NA", sens_val),
+      "  |  Spec=", ifelse(is.na(spec_val), "NA", spec_val),
+      "  (threshold=", round(youden_thresh, 3), ")"
+    )
+    
+    p <- ggplot(df, aes(x = label, y = score, fill = label)) +
+      geom_boxplot(alpha = 0.7, outlier.shape = NA, width = 0.5) +
+      geom_jitter() +
+      geom_hline(yintercept = youden_thresh, colour = "red",
+                 linetype = "solid", linewidth = 0.9) +
+      scale_fill_manual(values = setNames(c("#2BC4BE", "#E8736A"), c(cl, "Rest"))) +
+      labs(
+        title    = paste0("Score distribution — ", cl, " vs Rest"),
+        subtitle = subtitle_txt,
+        x = "class", y = paste0("Score (", cl, ")"), fill = "class"
+      ) +
+      ylim(0, 1) +
+      theme_bw(base_size = 12) +
+      theme(
+        legend.position  = "right",
+        legend.text      = element_text(size = 12, face = "bold"),
+        legend.title     = element_text(size = 14, face = "bold"),
+        axis.text.x      = element_text(size = 12, face = "bold"),
+        axis.text.y      = element_text(size = 12, face = "bold"),
+        plot.title       = element_text(size = 14, face = "bold", hjust = 0.5),
+        plot.subtitle    = element_text(size = 11, hjust = 0.5),
+        axis.title.x     = element_text(size = 15, face = "bold"),
+        axis.title.y     = element_text(size = 15, face = "bold"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+      )
+    
+    plot_list[[cl]] <- p
+  }
+  
+  n_cols <- min(3, n_classes)
+  n_rows <- ceiling(n_classes / n_cols)
+  
+  gridExtra::arrangeGrob(
+    grobs = plot_list,
+    ncol  = n_cols,
+    nrow  = n_rows,
+    top   = grid::textGrob(
+      paste0("Score plots per class (One-vs-Rest) — ", set_name),
+      gp = grid::gpar(fontsize = 16, fontface = "bold")
+    )
+  )
+}
+
+# =============================================================================
+# SCORE PLOT — une classe (pour carrousel et sélection)
+# =============================================================================
+score_plot_single_class <- function(actual, scores, cl, set_name = "Training", threshold = NULL) {
+  
+  # Matching exact d'abord
+  col_idx <- which(colnames(scores) == cl)
+  
+  # Sinon matching après nettoyage des deux côtés
+  if (length(col_idx) == 0) {
+    clean_cols <- sub("^score_|^Prob_", "", colnames(scores))
+    clean_cl   <- sub("^score_|^Prob_", "", cl)
+    col_idx    <- which(clean_cols == clean_cl)
+  }
+  
+  # Sinon matching insensible à la casse
+  if (length(col_idx) == 0) {
+    col_idx <- which(tolower(colnames(scores)) == tolower(cl))
+  }
+  
+  if (length(col_idx) == 0) {
+    stop(paste0("Colonne '", cl, "' introuvable. Disponibles : ",
+                paste(colnames(scores), collapse = ", ")))
+  }
+  
+  score_cl <- as.numeric(scores[, col_idx[1]])
+  
+  # Aligner actual et score_cl (même longueur)
+  actual <- actual[!is.na(score_cl)]
+  score_cl <- score_cl[!is.na(score_cl)]
+  
+  binary_label <- factor(ifelse(as.character(actual) == cl, cl, "Rest"),
+                         levels = c(cl, "Rest"))
+  
+  roc_obj <- tryCatch(
+    pROC::roc(binary_label, score_cl, quiet = TRUE,
+              levels = c("Rest", cl), direction = "<"),
+    error = function(e) NULL)
+  
+  auc_val <- NA
+  sens_val <- NA
+  spec_val <- NA
+  
+  if (is.null(threshold)) {
+    # Estimer le seuil de Youden sur ces données (mode Train)
+    youden_thresh <- 0.5
+    if (!is.null(roc_obj)) {
+      coords_y <- pROC::coords(roc_obj, "best",
+                               ret = c("threshold", "sensitivity", "specificity"),
+                               best.method = "youden", transpose = FALSE)
+      if (nrow(coords_y) > 0) {
+        youden_thresh <- coords_y$threshold[1]
+        sens_val      <- round(coords_y$sensitivity[1], 3)
+        spec_val      <- round(coords_y$specificity[1], 3)
+      }
+    }
+  } else {
+    # Seuil fourni depuis le train — calculer sens/spec sur ces données
+    youden_thresh <- threshold
+    if (!is.null(roc_obj)) {
+      coords_y <- pROC::coords(roc_obj, x = youden_thresh,
+                               ret = c("sensitivity", "specificity"),
+                               transpose = FALSE)
+      if (nrow(coords_y) > 0) {
+        sens_val <- round(coords_y$sensitivity[1], 3)
+        spec_val <- round(coords_y$specificity[1], 3)
+      }
+    }
+  }
+  
+  if (!is.null(roc_obj)) {
+    auc_val <- round(as.numeric(pROC::auc(roc_obj)), 3)
+  }
+  
+  df <- data.frame(score = score_cl, label = binary_label)
+  
+  subtitle_txt <- paste0(
+    "AUC=", ifelse(is.na(auc_val), "NA", auc_val),
+    "  |  Sens=", ifelse(is.na(sens_val), "NA", sens_val),
+    "  |  Spec=", ifelse(is.na(spec_val), "NA", spec_val),
+    "  (threshold=", round(youden_thresh, 3), ")"
+  )
+  
+  ggplot(df, aes(x = label, y = score, fill = label)) +
+    geom_boxplot(alpha = 0.7, outlier.shape = NA, width = 0.5) +
+    geom_jitter(
+      # width = 0.15, size = 1.8, alpha = 0.6, colour = "grey30"
+      ) +
+    geom_hline(yintercept = youden_thresh, colour = "red",
+               linetype = "solid", linewidth = 0.9) +
+    scale_fill_manual(values = setNames(c("#2BC4BE", "#E8736A"), c(cl, "Rest"))) +
+    labs(
+      title    = paste0(set_name, " — ", cl, " vs Rest"),
+      subtitle = subtitle_txt,
+      x = "class", y = paste0("Score (", cl, ")"), fill = "class"
+    ) +
+    ylim(0, 1) +
+    theme_bw(base_size = 12) +
+    theme(
+      legend.position  = "right",
+      legend.text = element_text(size = 12, face = "bold"),
+      legend.title = element_text(size = 14, face = "bold"),
+      axis.text.x = element_text(size = 12 ,  face = 'bold' ) ,
+      axis.text.y =  element_text(size = 12 , face =  'bold'),    
+      plot.title       = element_text(size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle    = element_text(size = 11, hjust = 0.5),
+      axis.text        = element_text(size = 11, face = "bold"),
+      axis.title.x     = element_text(size = 15, face = "bold"),
+      axis.title.y     = element_text(size = 15, face = "bold"),
+      axis.title       = element_text(size = 14, face = "bold"),
+      panel.grid.major = element_blank(),  
+      panel.grid.minor = element_blank(), 
+    )
+}
+
+# Calcule les seuils de Youden par classe sur le train
+compute_youden_thresholds <- function(actual, scores) {
+  classes <- levels(actual)
+  thresholds <- setNames(rep(0.5, length(classes)), classes)
+  
+  for (cl in classes) {
+    col_idx <- which(colnames(scores) == cl)
+    if (length(col_idx) == 0) next
+    
+    score_cl     <- as.numeric(scores[, col_idx[1]])
+    binary_label <- factor(ifelse(as.character(actual) == cl, cl, "Rest"),
+                           levels = c(cl, "Rest"))
+    
+    roc_obj <- tryCatch(
+      pROC::roc(binary_label, score_cl, quiet = TRUE,
+                levels = c("Rest", cl), direction = "<"),
+      error = function(e) NULL)
+    
+    if (!is.null(roc_obj)) {
+      coords_y <- tryCatch(
+        pROC::coords(roc_obj, "best",
+                     ret = c("threshold", "sensitivity", "specificity"),
+                     best.method = "youden", transpose = FALSE),
+        error = function(e) NULL)
+      if (!is.null(coords_y) && nrow(coords_y) > 0) {
+        thresholds[cl] <- coords_y$threshold[1]
+      }
+    }
+  }
+  thresholds
 }

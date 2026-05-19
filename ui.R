@@ -340,7 +340,7 @@ shinyUI(fluidPage(
                                                                       h5("Boruta Parameters"),
                                                                       numericInput("boruta_maxRuns","Max iterations (maxRuns)" , 100, min = 20, max = 1000, step = 50),
                                                                       conditionalPanel(condition ="input.help",helpText("Maximum number of random forest runs for Boruta. Increase for more stable results.")),
-                                                                      numericInput("boruta_pValue","p-value threshold" , 0.01, min = 0.001, max = 0.1, step = 0.005),
+                                                                      numericInput("boruta_pValue","p-value threshold" , 0.05, min = 0.001, max = 0.1, step = 0.005),
                                                                       conditionalPanel(condition ="input.help",helpText("Significance level for variable importance comparison against shadow attributes."))
                                                      )
                                               )
@@ -593,7 +593,10 @@ shinyUI(fluidPage(
                                                      #numericInput("thresholdmodel","Threshold model" ,0, min = -1, max = 1, step = 0.05),
                                                      conditionalPanel(condition ="input.help", helpText("The threshold of the score is used for classification")),
                                                      fluidRow(
-                                                       column(12,checkboxInput("fs","features selection by cross validation /!\\ ",F))
+                                                       column(12,checkboxInput("fs", label =  " "
+                                                                               # "features selection by cross validation /!\\ "
+                                                                               ,F)
+                                                              )
                                                      ),
                                                      helpText("/!\\ process can be long")
                                               ),
@@ -1002,8 +1005,7 @@ shinyUI(fluidPage(
                                                                         #column(),
                                                                         fluidRow(
                                                                           column(
-                                                                            width = 5
-                                                                          ),
+                                                                            width = 5),
                                                                           column(
                                                                             width = 3,
                                                                             conditionalPanel(condition="input.plotscoremodel=='points'",
@@ -1039,11 +1041,53 @@ shinyUI(fluidPage(
                                                                             br(nrow = 2),
                                                                             downloadButton("download_detailed_metrics_decouv")
                                                                           )
-                                                                        )
+                                                                        ),
+                                                                        # hr(),
+                                                                        
+                                                                        br(nrow = 3)
+                                                                      ),
+                                                                      
+                                                                      hr(),
+                                                                      fluidRow(
+                                                                        h4("Score plots par classe (One-vs-Rest) — Training"),
+                                                                        fluidRow(
+                                                                          # Carrousel — gauche
+                                                                          column(6,
+                                                                                 h5("← → Navigate classes", style = "text-align:center; color:grey;"),
+                                                                                 fluidRow(
+                                                                                   column(4, actionButton("carousel_prev_decouv", "◀ Prev",
+                                                                                                          style = "width:100%; background-color:#63BFBF; color:white; border:none;")),
+                                                                                   column(4, p(textOutput("carousel_class_label_decouv"),
+                                                                                               style = "text-align:center; font-weight:bold; padding-top:6px;")),
+                                                                                   column(4, actionButton("carousel_next_decouv", "Next ▶",
+                                                                                                          style = "width:100%; background-color:#63BFBF; color:white; border:none;"))
+                                                                                 ),
+                                                                                 plotOutput("scoreplot_carousel_decouv", height = "350px") %>%
+                                                                                   withSpinner(color = "#0dc5c1", type = 1)
+                                                                          ),
+                                                                          # Sélection — droite
+                                                                          column(6,
+                                                                                 uiOutput("scoreplot_select_ui_decouv"),
+                                                                                 plotOutput("scoreplot_select_decouv", height = "350px") %>%
+                                                                                   withSpinner(color = "#0dc5c1", type = 1)
+                                                                          )
+                                                                        ),
+                                                                        p(downloadButton("downloadplotscoreperclassCaro_decouv", "Download selected class plot"), align = "center")
                                                                         
                                                                       ),
+                                                                      br(nrow= 2),
+                                                                      fluidRow(
+                                                                        h4("Score plots par classe (One-vs-Rest) — Training", style = "margin-top: 20px;"),
+                                                                        plotOutput("plotscoreperclass_decouv", height = "650px") %>% withSpinner(color="#0dc5c1", type = 1),
+                                                                        p(downloadButton("downloadplotscoreperclass_decouv", "Download plot"), align = "center"),
+                                                                        br(nrow = 3)
+                                                                      ),
+                                                                      br(nrow = 10),
+                                                                      hr(),
+                                                                      hr(),
                                                                       hr(),
                                                                       conditionalPanel(condition ="input.adjustval==true  ",
+                                                                                       br(nrow = 3),
                                                                                        fluidRow(div(
                                                                                          column(6,h3("model validation"))
                                                                                          # , 
@@ -1064,7 +1108,9 @@ shinyUI(fluidPage(
                                                                                                 ),
                                                                                          # column(),
                                                                                          fluidRow(
-                                                                                           column(width = 5),
+                                                                                           column(width = 5
+                                                                                                  
+                                                                                                  ),
                                                                                            column(3,
                                                                                                   
                                                                                                   #conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames2","show indivuals names",value=FALSE)),
@@ -1091,6 +1137,39 @@ shinyUI(fluidPage(
                                                                                              downloadButton("download_detailed_metrics_val")
                                                                                            )
                                                                                          )
+                                                                                       ),
+                                                                                       
+                                                                                       fluidRow(
+                                                                                         hr(),
+                                                                                         h4("Score plots par classe (One-vs-Rest) — Validation"),
+                                                                                         fluidRow(
+                                                                                           column(6,
+                                                                                                  h5("← → Navigate classes", style = "text-align:center; color:grey;"),
+                                                                                                  fluidRow(
+                                                                                                    column(4, actionButton("carousel_prev_val", "◀ Prev",
+                                                                                                                           style = "width:100%; background-color:#63BFBF; color:white; border:none;")),
+                                                                                                    column(4, p(textOutput("carousel_class_label_val"),
+                                                                                                                style = "text-align:center; font-weight:bold; padding-top:6px;")),
+                                                                                                    column(4, actionButton("carousel_next_val", "Next ▶",
+                                                                                                                           style = "width:100%; background-color:#63BFBF; color:white; border:none;"))
+                                                                                                  ),
+                                                                                                  plotOutput("scoreplot_carousel_val", height = "350px") %>%
+                                                                                                    withSpinner(color = "#0dc5c1", type = 1)
+                                                                                           ),
+                                                                                           column(6,
+                                                                                                  uiOutput("scoreplot_select_ui_val"),
+                                                                                                  plotOutput("scoreplot_select_val", height = "350px") %>%
+                                                                                                    withSpinner(color = "#0dc5c1", type = 1)
+                                                                                           )
+                                                                                         ),
+                                                                                         p(downloadButton("downloadplotscoreperclassCaro_val", "Download selected class plot"), align = "center")
+                                                                                       ),
+                                                                                       # hr(),
+                                                                                       fluidRow(
+                                                                                         h4("Score plots par classe (One-vs-Rest) — Validation", style = "margin-top: 20px;"),
+                                                                                         plotOutput("plotscoreperclass_val") %>% withSpinner(color="#0dc5c1", type = 1),
+                                                                                         p(downloadButton("downloadplotscoreperclass_val", "Download plot"), align = "center")
+                                                                                         
                                                                                        )
                                                                       )
                                                      )
@@ -1227,118 +1306,118 @@ shinyUI(fluidPage(
                                             dataTableOutput("table_lc") %>% withSpinner(color = "#0dc5c1", type = 1),
                                             p(downloadButton("download_lc_data", "Download CSV"), align = "center")
                                    ),
-                                              tabPanel("Model Comparison", icon = icon("balance-scale"),
-                                                       br(),
-                                                       h3("Compare All Models"),
-                                                       helpText("Train all available models on the same data and compare their performance."),
-                                                       fluidRow(
-                                                         column(6,
-                                                                checkboxGroupInput("models_to_compare", "Models to compare:",
-                                                                                   c("Random Forest" = "randomforest",
-                                                                                     "SVM" = "svm",
-                                                                                     "ElasticNet" = "elasticnet",
-                                                                                     "XGBoost" = "xgboost",
-                                                                                     "Naive Bayes" = "naivebayes",
-                                                                                     "KNN" = "knn"),
-                                                                                   selected = c("randomforest", "svm", "elasticnet"))
-                                                         ),
-                                                         column(6,
-                                                                actionButton("run_comparison", h4("Run Comparison"),
-                                                                             style = "background-color: #63BFBF; color: white; border-color: #63BFBF;",
-                                                                             width = 200),
-                                                                br(), br(),
-                                                                helpText("This will train all selected models with automatic tuning.")
-                                                         )
-                                                       ),
-                                                       hr(),
-                                                       h4("Performance Summary"),
-                                                       dataTableOutput("comparison_metrics_table") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                       p(downloadButton("download_comparison_metrics", "Download metrics"), align = "center"),
-                                                       hr(),
-                                                       fluidRow(
-                                                         shiny::plotOutput("plotcompared_model",height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                         p(downloadButton("downloadplotcompared_model", "downlaod plot"), align= 'center')
-                                                       ), 
-                                                       fluidRow(
-                                                         column(6,
-                                                                h4("Radar Plot - Training"),
-                                                                plotOutput("radar_plot_train", height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                                p(downloadButton("download_radar_train", "Download plot"), align = "center")
-                                                         ),
-                                                         column(6,
-                                                                h4("Radar Plot - Validation"),
-                                                                plotOutput("radar_plot_val", height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                                p(downloadButton("download_radar_val", "Download plot"), align = "center")
-                                                         )
-                                                       ),
-                                                       hr(),
-                                                       h4("DeLong Test (AUC Comparison)"),
-                                                       helpText("Statistical test comparing AUC between pairs of models (p-value < 0.05 = significant difference)."),
-                                                       dataTableOutput("delong_test_table") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                       p(downloadButton("download_delong_table", "Download DeLong results"), align = "center"),
-                                                       hr(),
-                                                       h4("DeLong Test — FDR Corrected (Benjamini-Hochberg)"),
-                                                       helpText("P-values adjusted for multiple pairwise comparisons using the Benjamini-Hochberg method."),
-                                                       dataTableOutput("delong_corrected_table") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                       p(downloadButton("download_delong_corrected", "Download FDR-corrected results"), align = "center"),
-                                                       hr(),
-                                                       h4("DeLong Test — Per-Class Detail (One-vs-Rest)"),
-                                                       helpText("DeLong p-values for each class separately (OvR decomposition). Shows AUC per model and per class."),
-                                                       dataTableOutput("delong_perclass_table") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                       p(downloadButton("download_delong_perclass", "Download per-class results"), align = "center")
-                                              ),
-                                              tabPanel("Interpretability (XAI)", icon = icon("lightbulb"),
-                                                       br(),
-                                                       h3("Model Interpretability"),
-                                                       conditionalPanel(condition = "input.model != 'nomodel'",
-                                                         fluidRow(
-                                                           column(12,
-                                                                  h4("SHAP Values (Feature Importance)"),
-                                                                  helpText("SHAP values measure the contribution of each feature to individual predictions."),
-                                                                  fluidRow(
-                                                                    column(4, numericInput("shap_n_samples", "Number of samples for SHAP", 30, min = 5, max = 100, step = 5)),
-                                                                    column(4, actionButton("compute_shap", "Compute SHAP",
-                                                                                           style = "background-color: #63BFBF; color: white; margin-top: 25px;"))
-                                                                  ),
-                                                                  plotOutput("shap_importance_plot", height = "500px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                                  p(downloadButton("download_shap_plot", "Download SHAP plot"),
-                                                                    downloadButton("download_shap_data", "Download SHAP data"), align = "center")
-                                                           )
-                                                         ),
-                                                         hr(),
-                                                         fluidRow(
-                                                           column(12,
-                                                                  h4("Partial Dependence Plot (PDP)"),
-                                                                  helpText("Shows the marginal effect of a feature on model predictions."),
-                                                                  fluidRow(
-                                                                    column(4, selectInput("pdp_feature", "Select feature:", choices = NULL)),
-                                                                    column(4, actionButton("compute_pdp", "Generate PDP",
-                                                                                           style = "background-color: #63BFBF; color: white; margin-top: 25px;"))
-                                                                  ),
-                                                                  plotOutput("pdp_plot", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                                  p(downloadButton("download_pdp_plot", "Download PDP"), align = "center")
-                                                           )
-                                                         ),
-                                                         hr(),
-                                                         fluidRow(
-                                                           column(12,
-                                                                  h4("LIME (Local Interpretable Model-agnostic Explanations)"),
-                                                                  helpText("Explains individual predictions by approximating the model locally with an interpretable model."),
-                                                                  fluidRow(
-                                                                    column(3, numericInput("lime_n_features", "Number of features", 10, min = 3, max = 30, step = 1)),
-                                                                    column(3, numericInput("lime_sample_idx", "Sample index to explain", 1, min = 1, max = 100, step = 1)),
-                                                                    column(3, actionButton("compute_lime", "Generate LIME",
-                                                                                           style = "background-color: #63BFBF; color: white; margin-top: 25px;"))
-                                                                  ),
-                                                                  plotOutput("lime_plot", height = "500px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                                  p(downloadButton("download_lime_plot", "Download LIME plot"), align = "center")
-                                                           )
-                                                         )
-                                                       ),
-                                                       conditionalPanel(condition = "input.model == 'nomodel'",
-                                                                        h4("Please select and train a model first.", style = "color: grey; text-align: center; margin-top: 50px;")
-                                                       )
-                                              ),
+                                tabPanel("Model Comparison", icon = icon("balance-scale"),
+                                         br(),
+                                         h3("Compare All Models"),
+                                         helpText("Train all available models on the same data and compare their performance."),
+                                         fluidRow(
+                                           column(6,
+                                                  checkboxGroupInput("models_to_compare", "Models to compare:",
+                                                                     c("Random Forest" = "randomforest",
+                                                                       "SVM" = "svm",
+                                                                       "ElasticNet" = "elasticnet",
+                                                                       "XGBoost" = "xgboost",
+                                                                       "Naive Bayes" = "naivebayes",
+                                                                       "KNN" = "knn"),
+                                                                     selected = c("randomforest", "svm", "elasticnet"))
+                                           ),
+                                           column(6,
+                                                  actionButton("run_comparison", h4("Run Comparison"),
+                                                               style = "background-color: #63BFBF; color: white; border-color: #63BFBF;",
+                                                               width = 200),
+                                                  br(), br(),
+                                                  helpText("This will train all selected models with automatic tuning.")
+                                           )
+                                         ),
+                                         hr(),
+                                         h4("Performance Summary"),
+                                         dataTableOutput("comparison_metrics_table") %>% withSpinner(color="#0dc5c1",type = 1),
+                                         p(downloadButton("download_comparison_metrics", "Download metrics"), align = "center"),
+                                         hr(),
+                                         fluidRow(
+                                           shiny::plotOutput("plotcompared_model",height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                           p(downloadButton("downloadplotcompared_model", "downlaod plot"), align= 'center')
+                                         ), 
+                                         fluidRow(
+                                           column(6,
+                                                  h4("Radar Plot - Training"),
+                                                  plotOutput("radar_plot_train", height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                  p(downloadButton("download_radar_train", "Download plot"), align = "center")
+                                           ),
+                                           column(6,
+                                                  h4("Radar Plot - Validation"),
+                                                  plotOutput("radar_plot_val", height = "450px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                  p(downloadButton("download_radar_val", "Download plot"), align = "center")
+                                           )
+                                         ),
+                                         hr(),
+                                         h4("DeLong Test (AUC Comparison)"),
+                                         helpText("Statistical test comparing AUC between pairs of models (p-value < 0.05 = significant difference)."),
+                                         dataTableOutput("delong_test_table") %>% withSpinner(color="#0dc5c1",type = 1),
+                                         p(downloadButton("download_delong_table", "Download DeLong results"), align = "center"),
+                                         hr(),
+                                         h4("DeLong Test — FDR Corrected (Benjamini-Hochberg)"),
+                                         helpText("P-values adjusted for multiple pairwise comparisons using the Benjamini-Hochberg method."),
+                                         dataTableOutput("delong_corrected_table") %>% withSpinner(color="#0dc5c1",type = 1),
+                                         p(downloadButton("download_delong_corrected", "Download FDR-corrected results"), align = "center"),
+                                         hr(),
+                                         h4("DeLong Test — Per-Class Detail (One-vs-Rest)"),
+                                         helpText("DeLong p-values for each class separately (OvR decomposition). Shows AUC per model and per class."),
+                                         dataTableOutput("delong_perclass_table") %>% withSpinner(color="#0dc5c1",type = 1),
+                                         p(downloadButton("download_delong_perclass", "Download per-class results"), align = "center")
+                                ),
+                                              # tabPanel("Interpretability (XAI)", icon = icon("lightbulb"),
+                                              #          br(),
+                                              #          h3("Model Interpretability"),
+                                              #          conditionalPanel(condition = "input.model != 'nomodel'",
+                                              #            fluidRow(
+                                              #              column(12,
+                                              #                     h4("SHAP Values (Feature Importance)"),
+                                              #                     helpText("SHAP values measure the contribution of each feature to individual predictions."),
+                                              #                     fluidRow(
+                                              #                       column(4, numericInput("shap_n_samples", "Number of samples for SHAP", 30, min = 5, max = 100, step = 5)),
+                                              #                       column(4, actionButton("compute_shap", "Compute SHAP",
+                                              #                                              style = "background-color: #63BFBF; color: white; margin-top: 25px;"))
+                                              #                     ),
+                                              #                     plotOutput("shap_importance_plot", height = "500px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                              #                     p(downloadButton("download_shap_plot", "Download SHAP plot"),
+                                              #                       downloadButton("download_shap_data", "Download SHAP data"), align = "center")
+                                              #              )
+                                              #            ),
+                                              #            hr(),
+                                              #            fluidRow(
+                                              #              column(12,
+                                              #                     h4("Partial Dependence Plot (PDP)"),
+                                              #                     helpText("Shows the marginal effect of a feature on model predictions."),
+                                              #                     fluidRow(
+                                              #                       column(4, selectInput("pdp_feature", "Select feature:", choices = NULL)),
+                                              #                       column(4, actionButton("compute_pdp", "Generate PDP",
+                                              #                                              style = "background-color: #63BFBF; color: white; margin-top: 25px;"))
+                                              #                     ),
+                                              #                     plotOutput("pdp_plot", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                              #                     p(downloadButton("download_pdp_plot", "Download PDP"), align = "center")
+                                              #              )
+                                              #            ),
+                                              #            hr(),
+                                              #            fluidRow(
+                                              #              column(12,
+                                              #                     h4("LIME (Local Interpretable Model-agnostic Explanations)"),
+                                              #                     helpText("Explains individual predictions by approximating the model locally with an interpretable model."),
+                                              #                     fluidRow(
+                                              #                       column(3, numericInput("lime_n_features", "Number of features", 10, min = 3, max = 30, step = 1)),
+                                              #                       column(3, numericInput("lime_sample_idx", "Sample index to explain", 1, min = 1, max = 100, step = 1)),
+                                              #                       column(3, actionButton("compute_lime", "Generate LIME",
+                                              #                                              style = "background-color: #63BFBF; color: white; margin-top: 25px;"))
+                                              #                     ),
+                                              #                     plotOutput("lime_plot", height = "500px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                              #                     p(downloadButton("download_lime_plot", "Download LIME plot"), align = "center")
+                                              #              )
+                                              #            )
+                                              #          ),
+                                              #          conditionalPanel(condition = "input.model == 'nomodel'",
+                                              #                           h4("Please select and train a model first.", style = "color: grey; text-align: center; margin-top: 50px;")
+                                              #          )
+                                              # ),
                                               tabPanel("Advanced Visualizations", icon = icon("chart-area"),
                                                        br(),
                                                        h3("Advanced Visualizations"),
@@ -1459,8 +1538,8 @@ shinyUI(fluidPage(
                                                                 checkboxGroupInput("testtest", "Tests",
                                                                                    
                                                                                    c( "No test"="notest",
-                                                                                      "Wilcoxon Test" = "Kruskal",
-                                                                                      "Student Test" = "ANOVA",
+                                                                                      "Kruskal Test" = "Kruskal",
+                                                                                      "Anova Test" = "ANOVA",
                                                                                       # "Clustering + ElasticNet" = "clustEnet",
                                                                                       "Lasso" = "lasso", 
                                                                                       "ElasticNet" = "elasticnet"
@@ -1504,7 +1583,7 @@ shinyUI(fluidPage(
                                                                 radioButtons("tuning_method_test", "Hyperparameter tuning:",
                                                                              c("Default parameters" = "default",
                                                                                "Automatic tuning" = "automatic"),
-                                                                             selected = "default"),
+                                                                             selected = "automatic"),
                                                                 helpText("Automatic tuning uses model-specific optimization (tune.svm, tuneRF, cv.glmnet, xgb.cv, etc.)"),
                                                                 checkboxGroupInput("fstest","features selection by cross validation",choices = list("TRUE /!\\"=TRUE,"FALSE"=FALSE),inline = TRUE,selected ="FALSE"),
                                                                 helpText("/!\\ process can be long"),
@@ -1542,7 +1621,8 @@ shinyUI(fluidPage(
                                                            plotOutput("plottestparametersboth")%>% withSpinner(color="#0dc5c1",type = 1),
                                                            p(downloadButton("downloadplottestparametersboth","Download plot"), align = 'center')
                                                          )
-                                                       ),
+                                                       )
+                                                       #,
                                                        # fluidRow(
                                                        #   column(
                                                        #     12,
@@ -1560,15 +1640,15 @@ shinyUI(fluidPage(
                                                        #     helpText("Relationship between optimal threshold and validation performance. Each point represents a parameter combination. The curve shows the trend.")
                                                        #   )
                                                        # ),
-                                                       fluidRow(
-                                                         column(
-                                                           12,
-                                                           h5("Overfitting Analysis", style = "margin-top: 20px; margin-bottom: 10px;"),
-                                                           plotOutput("plottestparametersoverfitting")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                           p(downloadButton("downloadplottestparametersoverfitting","Download plot"), align = 'center'),
-                                                           helpText("Analysis of model overfitting. Positive values indicate overfitting (learning performance > validation performance). Values close to zero indicate good generalization.")
-                                                         )
-                                                       )
+                                                       # fluidRow(
+                                                       #   column(
+                                                       #     12,
+                                                       #     h5("Overfitting Analysis", style = "margin-top: 20px; margin-bottom: 10px;"),
+                                                       #     plotOutput("plottestparametersoverfitting")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                       #     p(downloadButton("downloadplottestparametersoverfitting","Download plot"), align = 'center'),
+                                                       #     helpText("Analysis of model overfitting. Positive values indicate overfitting (learning performance > validation performance). Values close to zero indicate good generalization.")
+                                                       #   )
+                                                       # )
                                               )
                                             )
                                    )
