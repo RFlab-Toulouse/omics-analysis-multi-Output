@@ -738,40 +738,82 @@ testNAstructure<-function(toto,threshold=0.05,maxvaluesgroupmin=100,minvaluesgro
   return(list("varNAstructure"=totopropselect,"restestNAstructure"=resp))
 }
 
-transformdatafunction<-function(learningselect,structuredfeatures,datastructuresfeatures,transformdataparameters){
-  learningtransform<-learningselect
-  
-  # --- paramètres appris sur le train (pour réplication sur validation) ---
+transformdatafunction <- function(learningselect, structuredfeatures, datastructuresfeatures, transformdataparameters) {
+  learningtransform <- learningselect
   train_params <- list()
   
+  # 1. NAstructure
   if(!is.null(structuredfeatures)){
     for(i in 1:ncol(structuredfeatures)){
-      learningtransform[which(is.na(structuredfeatures[,i])&learningselect[,1]==as.character(datastructuresfeatures[i,"lessgroup"])),as.character(datastructuresfeatures[i,"names"])]<-0
+      learningtransform[which(is.na(structuredfeatures[,i]) & learningselect[,1] == as.character(datastructuresfeatures[i,"lessgroup"])),
+                        as.character(datastructuresfeatures[i,"names"])] <- 0
     }
   }
-  if(transformdataparameters$log){ 
-    learningtransform[,-1]<-transformationlog(x = learningtransform[,-1]+1,logtype=transformdataparameters$logtype)}
-  if(transformdataparameters$arcsin){
-    # on apprend min/max sur le train
-    train_params$arcsin_min <- apply(learningtransform[,-1], 2, min, na.rm=TRUE)
-    train_params$arcsin_max <- apply(learningtransform[,-1], 2, max, na.rm=TRUE)
-    learningtransform[,-1]<-apply(X = learningtransform[,-1],MARGIN = 2,FUN = function(x){(x-min(x,na.rm = T))/(max(x,na.rm = T)-min(x,na.rm = T))})
-    learningtransform[,-1]<-asin(sqrt(learningtransform[,-1]))
-  }
-  if(transformdataparameters$standardization){
-    learningtransformsd<<-learningtransform
-    sdlearningtransform<-apply(X = learningtransform[-1],MARGIN = 2,FUN = sd,na.rm=T)
-    train_params$sd_scale <- sdlearningtransform  # sauvegarde du sd du train
-    learningtransform[,-1]<-scale(learningtransform[,-1],center = F,scale=sdlearningtransform)
+  
+  # 2. Log
+  if(transformdataparameters$log){
+    learningtransform[,-1] <- transformationlog(x = learningtransform[,-1] + 1, logtype = transformdataparameters$logtype)
   }
   
-  # Imputation : on apprend les paramètres sur le train et on les sauvegarde
-  res_imputation <- replaceNA_fit(toto=learningtransform, rempNA=transformdataparameters$rempNA, pos=TRUE, NAstructure=FALSE)
+  # 3. Arcsin
+  if(transformdataparameters$arcsin){
+    train_params$arcsin_min <- apply(learningtransform[,-1], 2, min, na.rm = TRUE)
+    train_params$arcsin_max <- apply(learningtransform[,-1], 2, max, na.rm = TRUE)
+    learningtransform[,-1] <- apply(X = learningtransform[,-1], MARGIN = 2,
+                                    FUN = function(x){ (x - min(x, na.rm=T)) / (max(x, na.rm=T) - min(x, na.rm=T)) })
+    learningtransform[,-1] <- asin(sqrt(pmax(0, pmin(1, as.matrix(learningtransform[,-1])))))  # ← pmax/pmin ajouté
+  }
+  
+  # 4. Imputation  ← remonté avant la standardisation
+  res_imputation <- replaceNA_fit(toto = learningtransform, rempNA = transformdataparameters$rempNA, pos = TRUE, NAstructure = FALSE)
   learningtransform       <- res_imputation$toto
   train_params$imputation <- res_imputation$imputation_params
   
-  return(list(learningtransform=learningtransform, train_params=train_params))
+  # 5. Standardisation  ← descend après l'imputation
+  if(transformdataparameters$standardization){
+    sdlearningtransform <- apply(X = learningtransform[,-1], MARGIN = 2, FUN = sd, na.rm = TRUE)
+    train_params$sd_scale <- sdlearningtransform
+    learningtransform[,-1] <- scale(learningtransform[,-1], center = FALSE, scale = sdlearningtransform)
+  }
+  
+  return(list(learningtransform = learningtransform, train_params = train_params))
 }
+
+# 
+# transformdatafunction<-function(learningselect,structuredfeatures,datastructuresfeatures,transformdataparameters){
+#   learningtransform<-learningselect
+#   
+#   # --- paramètres appris sur le train (pour réplication sur validation) ---
+#   train_params <- list()
+#   
+#   if(!is.null(structuredfeatures)){
+#     for(i in 1:ncol(structuredfeatures)){
+#       learningtransform[which(is.na(structuredfeatures[,i])&learningselect[,1]==as.character(datastructuresfeatures[i,"lessgroup"])),as.character(datastructuresfeatures[i,"names"])]<-0
+#     }
+#   }
+#   if(transformdataparameters$log){ 
+#     learningtransform[,-1]<-transformationlog(x = learningtransform[,-1]+1,logtype=transformdataparameters$logtype)}
+#   if(transformdataparameters$arcsin){
+#     # on apprend min/max sur le train
+#     train_params$arcsin_min <- apply(learningtransform[,-1], 2, min, na.rm=TRUE)
+#     train_params$arcsin_max <- apply(learningtransform[,-1], 2, max, na.rm=TRUE)
+#     learningtransform[,-1]<-apply(X = learningtransform[,-1],MARGIN = 2,FUN = function(x){(x-min(x,na.rm = T))/(max(x,na.rm = T)-min(x,na.rm = T))})
+#     learningtransform[,-1]<-asin(sqrt(learningtransform[,-1]))
+#   }
+#   if(transformdataparameters$standardization){
+#     learningtransformsd<<-learningtransform
+#     sdlearningtransform<-apply(X = learningtransform[-1],MARGIN = 2,FUN = sd,na.rm=T)
+#     train_params$sd_scale <- sdlearningtransform  # sauvegarde du sd du train
+#     learningtransform[,-1]<-scale(learningtransform[,-1],center = F,scale=sdlearningtransform)
+#   }
+#   
+#   # Imputation : on apprend les paramètres sur le train et on les sauvegarde
+#   res_imputation <- replaceNA_fit(toto=learningtransform, rempNA=transformdataparameters$rempNA, pos=TRUE, NAstructure=FALSE)
+#   learningtransform       <- res_imputation$toto
+#   train_params$imputation <- res_imputation$imputation_params
+#   
+#   return(list(learningtransform=learningtransform, train_params=train_params))
+# }
 
 transformationlog<-function(x,logtype){
   if(logtype=="log10"){x<-log10(x)}
@@ -931,27 +973,138 @@ replaceNA_fit <- function(toto, rempNA="z", pos=FALSE, NAstructure=FALSE,
 # que transformdatafunction sur la validation, en utilisant les paramètres
 # appris sur le train (train_params).
 # ============================================================================
+# applyTransformToValidation <- function(validation, transformdataparameters, train_params,
+#                                        structuredfeatures=NULL, datastructuresfeatures=NULL){
+#   valtransform <- validation
+#   
+#   # 1. Remplacement NAstructure (même logique que train)
+#   if(!is.null(structuredfeatures) && !is.null(datastructuresfeatures)){
+#     common_struct <- intersect(colnames(structuredfeatures), colnames(valtransform))
+#     for(i in seq_along(common_struct)){
+#       feat <- common_struct[i]
+#       lessgroup_row <- which(datastructuresfeatures[,"names"] == feat)
+#       if(length(lessgroup_row)>0){
+#         lessgroup <- as.character(datastructuresfeatures[lessgroup_row,"lessgroup"])
+#         na_idx <- which(is.na(valtransform[, feat]) & valtransform[,1]==lessgroup)
+#         if(length(na_idx)>0) valtransform[na_idx, feat] <- 0
+#       }
+#     }
+#   }
+#   
+#   # 2. Log
+#   if(transformdataparameters$log){
+#     valtransform[,-1] <- transformationlog(x=valtransform[,-1]+1, logtype=transformdataparameters$logtype)
+#   }
+#   
+#   # 3. Arcsin — utiliser les min/max du train
+#   if(transformdataparameters$arcsin){
+#     arcsin_min <- train_params$arcsin_min
+#     arcsin_max <- train_params$arcsin_max
+#     for(col in names(arcsin_min)){
+#       if(col %in% colnames(valtransform)){
+#         rng <- arcsin_max[col] - arcsin_min[col]
+#         if(rng == 0) rng <- 1
+#         valtransform[, col] <- (valtransform[, col] - arcsin_min[col]) / rng
+#         valtransform[, col] <- asin(sqrt(pmax(0, pmin(1, valtransform[, col]))))
+#       }
+#     }
+#   }
+#   
+#   # 4. Standardisation — utiliser le sd du train
+#   if(transformdataparameters$standardization && !is.null(train_params$sd_scale)){
+#     sd_train <- train_params$sd_scale
+#     common_cols <- intersect(names(sd_train), colnames(valtransform)[-1])
+#     sd_use <- sd_train[common_cols]
+#     sd_use[sd_use == 0] <- 1
+#     valtransform[, common_cols] <- scale(valtransform[, common_cols, drop=FALSE], center=FALSE, scale=sd_use)
+#   }
+#   
+#   # 5. Imputation — utiliser les paramètres appris sur le train
+#   imp <- train_params$imputation
+#   rempNA <- imp$method
+#   
+#   if(!is.null(rempNA) && rempNA != "none" && sum(is.na(valtransform)) > 0){
+#     cnames <- colnames(valtransform)
+#     class  <- valtransform[,1]
+#     toto   <- as.data.frame(valtransform[,-1], optional=TRUE)
+#     
+#     if(rempNA == "z"){
+#       toto[which(is.na(toto), arr.ind=TRUE)] <- 0
+#     }
+#     if(rempNA == "moy"){
+#       col_means <- imp$col_means
+#       for(col in colnames(toto)){
+#         na_idx <- which(is.na(toto[,col]))
+#         if(length(na_idx)>0 && col %in% names(col_means)){
+#           toto[na_idx, col] <- col_means[col]
+#         }
+#       }
+#     }
+#     if(rempNA == "moygr"){
+#       cat_lev     <- levels(class)
+#       group_means <- imp$group_means
+#       for(grp in cat_lev){
+#         if(!grp %in% names(group_means)) next
+#         gm      <- group_means[[grp]]
+#         grp_idx <- which(class == grp)
+#         for(col in colnames(toto)){
+#           na_idx <- intersect(which(is.na(toto[,col])), grp_idx)
+#           if(length(na_idx)>0 && col %in% names(gm)){
+#             toto[na_idx, col] <- gm[col]
+#           }
+#         }
+#       }
+#       toto[which(is.na(toto), arr.ind=TRUE)] <- 0
+#     }
+#     if(rempNA == "pca"){
+#       # On combine train (sans NA) + validation et on garde seulement les lignes validation
+#       train_data <- imp$train_data
+#       common_cols_pca <- intersect(colnames(train_data), colnames(toto))
+#       combined <- rbind(train_data[, common_cols_pca], toto[, common_cols_pca])
+#       res_pca  <- imputePCA(combined, ncp=min(ncol(combined)-1, 5), method.cv="Kfold")
+#       toto_imp <- as.data.frame(res_pca$completeObs)
+#       toto[, common_cols_pca] <- toto_imp[(nrow(train_data)+1):nrow(combined), ]
+#       toto[which(toto<0, arr.ind=TRUE)] <- 0
+#     }
+#     if(rempNA == "missforest"){
+#       train_data <- imp$train_data
+#       common_cols_mf <- intersect(colnames(train_data), colnames(toto))
+#       combined <- rbind(train_data[, common_cols_mf], toto[, common_cols_mf])
+#       res_mf   <- missForest(combined, maxiter=5)
+#       toto_imp <- res_mf$ximp
+#       toto[, common_cols_mf] <- toto_imp[(nrow(train_data)+1):nrow(combined), ]
+#       toto[which(toto<0, arr.ind=TRUE)] <- 0
+#     }
+#     
+#     valtransform <- cbind(class, toto)
+#     valtransform[which(is.na(valtransform), arr.ind=TRUE)] <- 0
+#     colnames(valtransform) <- cnames
+#   }
+#   
+#   return(valtransform)
+# }
+
 applyTransformToValidation <- function(validation, transformdataparameters, train_params,
-                                       structuredfeatures=NULL, datastructuresfeatures=NULL){
+                                       structuredfeatures = NULL, datastructuresfeatures = NULL) {
   valtransform <- validation
   
-  # 1. Remplacement NAstructure (même logique que train)
+  # 1. NAstructure
   if(!is.null(structuredfeatures) && !is.null(datastructuresfeatures)){
     common_struct <- intersect(colnames(structuredfeatures), colnames(valtransform))
     for(i in seq_along(common_struct)){
       feat <- common_struct[i]
       lessgroup_row <- which(datastructuresfeatures[,"names"] == feat)
-      if(length(lessgroup_row)>0){
-        lessgroup <- as.character(datastructuresfeatures[lessgroup_row,"lessgroup"])
-        na_idx <- which(is.na(valtransform[, feat]) & valtransform[,1]==lessgroup)
-        if(length(na_idx)>0) valtransform[na_idx, feat] <- 0
+      if(length(lessgroup_row) > 0){
+        lessgroup <- as.character(datastructuresfeatures[lessgroup_row, "lessgroup"])
+        na_idx <- which(is.na(valtransform[, feat]) & valtransform[,1] == lessgroup)
+        if(length(na_idx) > 0) valtransform[na_idx, feat] <- 0
       }
     }
   }
   
   # 2. Log
   if(transformdataparameters$log){
-    valtransform[,-1] <- transformationlog(x=valtransform[,-1]+1, logtype=transformdataparameters$logtype)
+    valtransform[,-1] <- transformationlog(x = valtransform[,-1] + 1, logtype = transformdataparameters$logtype)
   }
   
   # 3. Arcsin — utiliser les min/max du train
@@ -968,34 +1121,24 @@ applyTransformToValidation <- function(validation, transformdataparameters, trai
     }
   }
   
-  # 4. Standardisation — utiliser le sd du train
-  if(transformdataparameters$standardization && !is.null(train_params$sd_scale)){
-    sd_train <- train_params$sd_scale
-    common_cols <- intersect(names(sd_train), colnames(valtransform)[-1])
-    sd_use <- sd_train[common_cols]
-    sd_use[sd_use == 0] <- 1
-    valtransform[, common_cols] <- scale(valtransform[, common_cols, drop=FALSE], center=FALSE, scale=sd_use)
-  }
-  
-  # 5. Imputation — utiliser les paramètres appris sur le train
-  imp <- train_params$imputation
+  # 4. Imputation — utiliser les paramètres appris sur le train  ← remonté avant standardisation
+  imp    <- train_params$imputation
   rempNA <- imp$method
   
   if(!is.null(rempNA) && rempNA != "none" && sum(is.na(valtransform)) > 0){
     cnames <- colnames(valtransform)
     class  <- valtransform[,1]
-    toto   <- as.data.frame(valtransform[,-1], optional=TRUE)
+    toto   <- as.data.frame(valtransform[,-1], optional = TRUE)
     
     if(rempNA == "z"){
-      toto[which(is.na(toto), arr.ind=TRUE)] <- 0
+      toto[which(is.na(toto), arr.ind = TRUE)] <- 0
     }
     if(rempNA == "moy"){
       col_means <- imp$col_means
       for(col in colnames(toto)){
-        na_idx <- which(is.na(toto[,col]))
-        if(length(na_idx)>0 && col %in% names(col_means)){
+        na_idx <- which(is.na(toto[, col]))
+        if(length(na_idx) > 0 && col %in% names(col_means))
           toto[na_idx, col] <- col_means[col]
-        }
       }
     }
     if(rempNA == "moygr"){
@@ -1006,43 +1149,53 @@ applyTransformToValidation <- function(validation, transformdataparameters, trai
         gm      <- group_means[[grp]]
         grp_idx <- which(class == grp)
         for(col in colnames(toto)){
-          na_idx <- intersect(which(is.na(toto[,col])), grp_idx)
-          if(length(na_idx)>0 && col %in% names(gm)){
+          na_idx <- intersect(which(is.na(toto[, col])), grp_idx)
+          if(length(na_idx) > 0 && col %in% names(gm))
             toto[na_idx, col] <- gm[col]
-          }
         }
       }
-      toto[which(is.na(toto), arr.ind=TRUE)] <- 0
+      toto[which(is.na(toto), arr.ind = TRUE)] <- 0
     }
     if(rempNA == "pca"){
-      # On combine train (sans NA) + validation et on garde seulement les lignes validation
-      train_data <- imp$train_data
-      common_cols_pca <- intersect(colnames(train_data), colnames(toto))
-      combined <- rbind(train_data[, common_cols_pca], toto[, common_cols_pca])
-      res_pca  <- imputePCA(combined, ncp=min(ncol(combined)-1, 5), method.cv="Kfold")
-      toto_imp <- as.data.frame(res_pca$completeObs)
-      toto[, common_cols_pca] <- toto_imp[(nrow(train_data)+1):nrow(combined), ]
-      toto[which(toto<0, arr.ind=TRUE)] <- 0
+      common_cols_pca <- intersect(colnames(imp$train_data), colnames(toto))
+      combined <- rbind(imp$train_data[, common_cols_pca], toto[, common_cols_pca])
+      n_train  <- nrow(imp$train_data)
+      res_proj <- imputePCA(combined,
+                            ncp       = imp$pca_res$call$ncp,  # ← même ncp que le train
+                            method.cv = "none")                 # ← pas de re-CV
+      toto[, common_cols_pca] <- res_proj$completeObs[(n_train + 1):nrow(combined), ]
+      toto[which(toto < 0, arr.ind = TRUE)] <- 0
     }
     if(rempNA == "missforest"){
-      train_data <- imp$train_data
-      common_cols_mf <- intersect(colnames(train_data), colnames(toto))
-      combined <- rbind(train_data[, common_cols_mf], toto[, common_cols_mf])
-      res_mf   <- missForest(combined, maxiter=5)
-      toto_imp <- res_mf$ximp
-      toto[, common_cols_mf] <- toto_imp[(nrow(train_data)+1):nrow(combined), ]
-      toto[which(toto<0, arr.ind=TRUE)] <- 0
+      common_cols_mf <- intersect(colnames(imp$train_data), colnames(toto))
+      # Imputation par médiane du train — sans re-fit sur validation  ← corrigé
+      train_medians <- apply(imp$train_data[, common_cols_mf], 2, median, na.rm = TRUE)
+      for(col in common_cols_mf){
+        na_idx <- which(is.na(toto[, col]))
+        if(length(na_idx) > 0) toto[na_idx, col] <- train_medians[col]
+      }
+      toto[which(toto < 0, arr.ind = TRUE)] <- 0
     }
     
     valtransform <- cbind(class, toto)
-    valtransform[which(is.na(valtransform), arr.ind=TRUE)] <- 0
+    valtransform[which(is.na(valtransform), arr.ind = TRUE)] <- 0
     colnames(valtransform) <- cnames
+  }
+  
+  # 5. Standardisation — utiliser le sd du train  ← descend après l'imputation
+  if(transformdataparameters$standardization && !is.null(train_params$sd_scale)){
+    sd_train    <- train_params$sd_scale
+    common_cols <- intersect(names(sd_train), colnames(valtransform)[-1])
+    sd_use      <- sd_train[common_cols]
+    sd_use[sd_use == 0] <- 1
+    valtransform[, common_cols] <- scale(valtransform[, common_cols, drop = FALSE],
+                                         center = FALSE, scale = sd_use)
   }
   
   return(valtransform)
 }
 
-mdsplot<-function(toto,ggplot=T,maintitle="MDS representation of the individuals",graph=T){
+mdsplot <- function(toto,ggplot=T,maintitle="MDS representation of the individuals",graph=T){
   class<-toto[,1]
   toto<-toto[-1]
   d <- dist(toto) # euclidean distances between the rows
@@ -1065,7 +1218,7 @@ mdsplot<-function(toto,ggplot=T,maintitle="MDS representation of the individuals
   }
 }
 
-heatmapplot<-function(toto,ggplot=T,maintitle="Heatmap of the transform data ",scale=F,graph=T){
+heatmapplot <- function(toto,ggplot=T,maintitle="Heatmap of the transform data ",scale=F,graph=T){
   row.names(toto)<-paste(toto[,1],1:length(toto[,1]))
   toto<-as.matrix(toto[,-1])
   if(!graph){return(toto)}
@@ -5275,10 +5428,13 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       cat("classval head:", paste(head(classval), collapse=", "), "\n")
       
       # Select same features as training
-      common_features <- intersect(colnames(learningmodel), colnames(validationmodel))
+      cat("colnames of learningmodel :  ", "\n")
+      print(colnames(learningmodel))
+      cat("colnames of validationmodel :  ", paste(colnames(validationmodel), collapse=", "), "\n")
+      common_features <- intersect(colnames(learningmodel)[-1], colnames(validationmodel)[-1])
       cat("checking des colonnes de validation par rapport au modele d'apprentissage...\n")
       print(intersect(colnames(learningmodel), colnames(validationmodel)))
-      validationmodel <- cbind(validationmodel[,1], validationmodel[, common_features])
+      validationmodel <- validationmodel[, c(colnames(validationmodel)[1], common_features)]
       colnames(validationmodel)[1] <- "group"
       
       # classval <- validationmodel[,1]
@@ -5303,7 +5459,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       
       if(modelparameters$modeltype == "svm"){
         if(is_binary) {
-          scoreval <- data.frame(as.vector(e1071:::predict.svm(model, validationmodel[,-1], decision.values=TRUE)))
+          scoreval <- data.frame(as.vector(e1071:::predict.svm(model, validationmodel[,-1], probability=TRUE)))
           colnames(scoreval) <- paste(lev[1],"/",lev[2],sep="")
           predictclassval <- factor(levels = lev)
           predictclassval[which(scoreval >= modelparameters$thresholdmodel)] <- lev["positif"]

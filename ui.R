@@ -1049,7 +1049,7 @@ shinyUI(fluidPage(
                                                                       
                                                                       hr(),
                                                                       fluidRow(
-                                                                        h4("Score plots par classe (One-vs-Rest) — Training"),
+                                                                        h4("Score plots per classe (One-vs-Rest) — Training"),
                                                                         fluidRow(
                                                                           # Carrousel — gauche
                                                                           column(6,
@@ -1077,7 +1077,7 @@ shinyUI(fluidPage(
                                                                       ),
                                                                       br(nrow= 2),
                                                                       fluidRow(
-                                                                        h4("Score plots par classe (One-vs-Rest) — Training", style = "margin-top: 20px;"),
+                                                                        h4("Score plots per classe (One-vs-Rest) — Training", style = "margin-top: 20px;"),
                                                                         plotOutput("plotscoreperclass_decouv", height = "650px") %>% withSpinner(color="#0dc5c1", type = 1),
                                                                         p(downloadButton("downloadplotscoreperclass_decouv", "Download plot"), align = "center"),
                                                                         br(nrow = 3)
@@ -1141,7 +1141,7 @@ shinyUI(fluidPage(
                                                                                        
                                                                                        fluidRow(
                                                                                          hr(),
-                                                                                         h4("Score plots par classe (One-vs-Rest) — Validation"),
+                                                                                         h4("Score plots per classe (One-vs-Rest) — Validation"),
                                                                                          fluidRow(
                                                                                            column(6,
                                                                                                   h5("← → Navigate classes", style = "text-align:center; color:grey;"),
@@ -1166,7 +1166,7 @@ shinyUI(fluidPage(
                                                                                        ),
                                                                                        # hr(),
                                                                                        fluidRow(
-                                                                                         h4("Score plots par classe (One-vs-Rest) — Validation", style = "margin-top: 20px;"),
+                                                                                         h4("Score plots per classe (One-vs-Rest) — Validation", style = "margin-top: 20px;"),
                                                                                          plotOutput("plotscoreperclass_val") %>% withSpinner(color="#0dc5c1", type = 1),
                                                                                          p(downloadButton("downloadplotscoreperclass_val", "Download plot"), align = "center")
                                                                                          
