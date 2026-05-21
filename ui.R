@@ -367,7 +367,8 @@ shinyUI(fluidPage(
                                                              fluidRow(
                                                                column(12,
                                                                       h4("Clustering + ElasticNet Selection Results"),
-                                                                      textOutput("nbclustenetselected",inline=T), " variables selected",br(),br(),
+                                                                      # textOutput("nbclustenetselected",inline=T), " variables selected" ,br(),br(),
+                                                                      
                                                                       h5("Method Parameters"),
                                                                       fluidRow(
                                                                         column(3, strong("Clusters:"), textOutput("clustenetnclusters",inline=T)),
@@ -464,7 +465,7 @@ shinyUI(fluidPage(
                                             fluidRow(
                                               column(6,
                                                      h5(" 2D View (PC1 vs PC2)"),
-                                                     plotlyOutput("pca_plot_2d_stats", height = "450px") %>% 
+                                                     plotlyOutput("pca_plot_2d_stats", height = "450px", width = "100%") %>% 
                                                        withSpinner(color = "#0dc5c1", type = 1),
                                                      br(),
                                                      p(downloadButton("downloadplotPCA2D") %>% 
@@ -608,7 +609,7 @@ shinyUI(fluidPage(
                                                                                      #"Manual parameters" = "manual",
                                                                                      "Cross-validation (cv.glmnet)" = "traditional",
                                                                                      "GridSearchCV (superml)" = "gridsearch"),
-                                                                                   selected = "traditional"),
+                                                                                   selected = "gridsearch"),
                                                                       conditionalPanel(condition ="input.help",
                                                                                        helpText("Manual: set alpha/lambda manually"),
                                                                                        helpText("cv.glmnet: optimizes lambda for fixed alpha"),
@@ -1536,7 +1537,6 @@ shinyUI(fluidPage(
                                                          #fluidRow(
                                                          column(3,
                                                                 checkboxGroupInput("testtest", "Tests",
-                                                                                   
                                                                                    c( "No test"="notest",
                                                                                       "Kruskal Test" = "Kruskal",
                                                                                       "Anova Test" = "ANOVA",

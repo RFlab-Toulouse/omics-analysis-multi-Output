@@ -626,9 +626,15 @@ output$nvarselect=renderText({
   })
   
 output$heatmapNA<-renderPlot({
+  req(SELECTDATA()$LEARNINGSELECT)
   learningselect<-SELECTDATA()$LEARNINGSELECT
-  heatmapNA(toto =learningselect)
+  tryCatch({
+    heatmapNA(toto =learningselect)
+  }, error = function(e){
+    errorplot(text = " No NA's in the dataset")
+  })
 })
+
 output$downloadplotheatmapNA = downloadHandler(
   filename = function() { 
     paste('graph','.',input$paramdownplot, sep='') 
@@ -654,7 +660,15 @@ output$downloaddataheatmapNA <- downloadHandler(
 output$plotNA<-renderPlot({
   learningselect<-SELECTDATA()$LEARNINGSELECT
   learning<-DATA()$LEARNING
-  distributionvalues(toto = learning,prctvaluesselect =input$prctvalues/100,nvar = ncol(learningselect) ,ggplot =  T)  
+  tryCatch({
+    distributionvalues(toto = learning,
+                       prctvaluesselect =input$prctvalues/100,
+                       nvar = ncol(learningselect) ,
+                       ggplot =  T)  
+  }, error = function(e){
+    errorplot(text = " No NA's in the dataset")
+  })
+  
 })
 
 
@@ -681,7 +695,12 @@ output$nstructuredfeatures<-renderText({
 output$heatmapNAstructure<-renderPlot({
   group<<-DATA()$LEARNING[,1]
   structuredfeatures<<-SELECTDATA()$STRUCTUREDFEATURES
-  heatmapNA(toto=cbind(group,structuredfeatures))            
+  tryCatch({
+    heatmapNA(toto=cbind(group,structuredfeatures))   
+  }, error =  function(e){
+   errorplot(text = " No NA's structure")
+  })
+          
   #else{errorplot(text = " No NA's structure")}
 })
   
@@ -789,7 +808,12 @@ output$download_umap <- downloadHandler(
 output$clustered_heatmap <- renderPlot({
   data <- adv_viz_data()
   req(data)
-  plot_clustered_heatmap(data$X, data$y, n_top = input$heatmap_n_top)
+  tryCatch({
+    plot_clustered_heatmap(data$X, data$y, n_top = input$heatmap_n_top)
+  }, error =  function(){
+    errorplot(text = "Not enough features for heatmap")
+  })
+  
   
 })
 
@@ -809,7 +833,12 @@ output$download_heatmap <- downloadHandler(
 output$correlation_network <- renderPlot({
   data <- adv_viz_data()
   req(data)
-  plot_correlation_network(data$X, cor_threshold = input$cor_threshold)
+  tryCatch({
+    plot_correlation_network(data$X, cor_threshold = input$cor_threshold)
+  }, error = function(e){
+    errorplot(text = "Not enough features for correlation network")
+  })
+  
 })
 
 output$download_cor_network <- downloadHandler(
@@ -853,7 +882,12 @@ output$downloaddatatransform<- downloadHandler(
 
 output$plotheatmaptransformdata<-renderPlot({
   learningtransform<-TRANSFORMDATA()$LEARNINGTRANSFORM
-  heatmapplot(toto =learningtransform,ggplot = T,scale=F)
+  tryCatch({
+    heatmapplot(toto =learningtransform,ggplot = T,scale=F)
+  }, errror = function(){
+    errorplot(text = "Not enough features for heatmap")
+  })
+  
 })
 
 output$downloadplotheatmap = downloadHandler(
@@ -872,8 +906,13 @@ output$downloaddataheatmap <- downloadHandler(
   })
 
 output$plotmds<-renderPlot({
-  learningtransform<-TRANSFORMDATA()$LEARNINGTRANSFORM
-  mdsplot(toto = learningtransform,ggplot=T)
+  learningtransform <- TRANSFORMDATA()$LEARNINGTRANSFORM
+  tryCatch({
+    mdsplot(toto = learningtransform, ggplot=T)
+  }, error = function(e){
+    errorplot(text = "Not enough features for MDS plot")
+  })
+  
 })
 output$downloadplotmds = downloadHandler(
   filename = function() { 
@@ -891,7 +930,11 @@ output$downloaddatamds <- downloadHandler(
 
 output$plothist<-renderPlot({
   learningtransform<-TRANSFORMDATA()$LEARNINGTRANSFORM
-  histplot(toto=learningtransform)
+  tryCatch({
+    histplot(toto=learningtransform)
+  }, error = function(e){
+    errorplot(text = "Not enough features for histogram")
+  })
 })
 output$downloadplothist = downloadHandler(
   filename = function() { 
@@ -996,7 +1039,11 @@ output$boruta_shadow_max <- renderText({
 output$boruta_importance_plot <- renderPlot({
   boruta_res <- TEST()$BORUTA_RESULT
   req(boruta_res)
-  boruta_importance_plot(boruta_res$boruta_result, graph = TRUE)
+ tryCatch({
+   boruta_importance_plot(boruta_res$boruta_result, graph = TRUE)
+  }, error = function(e){
+    errorplot(text = "Error generating Boruta importance plot")
+  })
 })
 
 output$download_boruta_plot <- downloadHandler(
@@ -1085,7 +1132,7 @@ output$negatif<-renderText({
 #   tags$div(
 #     id = "class_count_indicator",
 #     style = sprintf("color: white; background-color: %s; padding: 10px; border-radius: 5px; text-align: center; font-weight: bold;", badge_color),
-#     sprintf("📊 %d classe%s détectée%s (multi-classe)", n_classes, if(n_classes > 1) "s" else "", if(n_classes > 1) "s" else "")
+#     sprintf(" %d classe%s détectée%s (multi-classe)", n_classes, if(n_classes > 1) "s" else "", if(n_classes > 1) "s" else "")
 #   )
 # })
 
@@ -1094,7 +1141,16 @@ output$volcanoplot <- renderPlot({
   datatest<<-TEST()$DATATEST
   useddata<<-TEST()$USEDDATA
   colnames(useddata)[3]<-colnames(datatest)[5]
-  volcanoplot(logFC =useddata[,3],pval = useddata$pval,thresholdFC = input$thresholdFC,thresholdpv = (input$thresholdpv ),completedata=useddata[,1:3] )
+  tryCatch({
+    volcanoplot(logFC = useddata[,3],
+                pval = useddata$pval,
+                thresholdFC = input$thresholdFC,
+                thresholdpv = (input$thresholdpv ),
+                completedata=useddata[,1:3] )
+  }, error =  function(e){
+    errorplot(text = " ")
+   }
+  )
 })
 output$downloadvolcanoplot = downloadHandler(
   filename = function() {paste('graph','.',input$paramdownplot, sep='')},
@@ -1192,8 +1248,14 @@ output$downloadbarplottest = downloadHandler(
 #                                                         "pageLength" = 10))
 output$plottestSF=renderPlot({
   hypothesistest<-TEST()$HYPOTHESISTEST   
-  barplottestSF(hypothesistest)
+  tryCatch({
+    barplottestSF(hypothesistest)
+  }, error =  function(e){
+    errorplot(text = "Error while generated graphes")
+  })
 })
+
+
 output$downloadplottestSF = downloadHandler(
   filename = function() {paste('graph','.',input$paramdownplot, sep='')},
   content = function(file) {
@@ -1549,7 +1611,7 @@ MODEL<-reactive({
   validate(need(ncol(learningmodel)>1,"Not enough features"))
 
 
-  resmodel<<-modelfunction(learningmodel = learningmodel,validation = validation,
+  resmodel<<-modelfunction_MC(learningmodel = learningmodel,validation = validation,
                            modelparameters = modelparameters,
                            transformdataparameters = transformdataparameters,
                            datastructuresfeatures =  datastructuresfeatures,
@@ -1578,27 +1640,42 @@ observe({
 
 # Display optimal hyperparameters for models
 output$modelalpha<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$alpha, digits = 3)
-  } else {
-    "N/A"
-  }
+  req(MODEL()$MODEL$alpha)
+  tryCatch({
+    if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
+      format(MODEL()$MODEL$alpha, digits = 3)
+    } else {
+      "N/A"
+    }
+  }, error = function(e){
+    print(e$message)
+  })
 })
 
 output$modellambda<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$optimal_lambda, scientific = TRUE, digits = 4)
-  } else {
-    "N/A"
-  }
+  req(MODEL()$MODEL$optimal_lambda)
+  tryCatch({
+    if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
+      format(MODEL()$MODEL$optimal_lambda, scientific = TRUE, digits = 4)
+    } else {
+      "N/A"
+    }
+  }, error =  function(e){
+    print(e$message)
+  })
 })
 
 output$modellambda1se<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL) && !is.null(MODEL()$MODEL$lambda_1se)){
-    format(MODEL()$MODEL$lambda_1se, scientific = TRUE, digits = 4)
-  } else {
-    "N/A"
-  }
+  req(MODEL()$MODEL$lambda_1se)
+  tryCatch({
+    if(input$model=="elasticnet" && !is.null(MODEL()$MODEL) && !is.null(MODEL()$MODEL$lambda_1se)){
+      format(MODEL()$MODEL$lambda_1se, scientific = TRUE, digits = 4)
+    } else {
+      "N/A"
+    }
+  }, error = function(e){
+    print(e$message)
+  })
 })
 
 output$modelnonzerocoef<-renderText({
@@ -1813,12 +1890,16 @@ output$nbselectmodel<-renderText({
 
 output$tabmodeldecouv <- renderPlot({
   datalearningmodel <- MODEL()$DATALEARNINGMODEL
-  confusion_matrix_multiclass(
-    predicted = datalearningmodel$reslearningmodel$predictclasslearning,
-    actual = datalearningmodel$reslearningmodel$classlearning,
-    normalize = FALSE,
-    graph = TRUE
-  )
+  tryCatch({
+    confusion_matrix_multiclass(
+      predicted = datalearningmodel$reslearningmodel$predictclasslearning,
+      actual = datalearningmodel$reslearningmodel$classlearning,
+      normalize = FALSE,
+      graph = TRUE
+    )
+  }, error = function(e){
+    errorplot(text = paste("Error generating confusion matrix:" , e$message))
+  })
 })
 
 
@@ -2927,10 +3008,17 @@ output$plotmodeldecouvroc <- renderPlot({
 
 # Indicateur si multi-classe (pour conditionalPanel dans UI)
 output$isMulticlass <- reactive({
-  datalearningmodel <- MODEL()$DATALEARNINGMODEL
-  n_classes <- length(levels(datalearningmodel$reslearningmodel$classlearning))
-  return(n_classes > 2)
+  req(MODEL()$DATALEARNINGMODEL)
+  tryCatch({
+    datalearningmodel <- MODEL()$DATALEARNINGMODEL
+    n_classes <- length(levels(datalearningmodel$reslearningmodel$classlearning))
+    return(n_classes > 2)
+  }, error = function(e){
+     print(e$message)
+  })
+  
 })
+
 outputOptions(output, 'isMulticlass', suspendWhenHidden = FALSE)
 
 # Nombre de classes
@@ -3942,48 +4030,67 @@ output$download_pca_variance <- downloadHandler(
 
 
 output$pca_plot_2d_stats <- renderPlotly({
-  # Utiliser les données différentiellement exprimées si disponibles
   if(input$test != "notest") {
-    data <- TEST()$LEARNINGDIFF
-    req(data)
+    tryCatch({
+      data <- TEST()$LEARNINGDIFF
+      req(data)
+      y <- data[, 1]
+      X <- data[, -1, drop = FALSE]
+      if(ncol(X) >= 2) {
+        PlotPca2D_interactive(data = X, y = y, title = "PCA 2D - selected variables")
+      } else {
+        # plot_ly() %>% layout(title = "Not enough variables for PCA 2D")
+        errorplot(text = "Not enough variables for PCA 2D plot (minimum 2 variables required)")
+      }
+    }, error = function(e){
+
+      # plot_ly() %>% layout(title = paste("Error:", e$message))
+      errorplot(text =  "Not enough data for variables for PCA 2D plot")
+    })
+  } else {
     
-    y <- data[, 1]
-    X <- data[, -1, drop = FALSE]
-    
-    if(ncol(X) >= 2) {
-      PlotPca2D_interactive(
-        data = X, 
-        y = y, 
-        title = "PCA 2D - selected variables"
-      )
-    }
+    #plot_ly() %>% layout(title = "No statistical test selected")
+    errorplot(text = " ")
   }
 })
+
+errorplotly <-function(text=paste("error /n","text error")){
+  plotly::ggplotly(c(0, 1), c(0, 1), ann = F, bty = 'n', type = 'n', xaxt = 'n', yaxt = 'n')
+  text(x = 0.5, y = 0.5, text,cex = 1.6, col = "black")
+}
+
 
 
 output$pca_plot_3d_stats <- renderPlotly({
   # Utiliser les données différentiellement exprimées si disponibles
   if(input$test != "notest") {
-    data <- TEST()$LEARNINGDIFF
-    req(data)
-    
-    y <- data[, 1]
-    X <- data[, -1, drop = FALSE]
-    
-    if(ncol(X) >= 3) {
-      PlotPca3D_interactive(
-        data = X, 
-        y = y, 
-        title = "PCA 3D - selected variables"
-      )
-    } else {
-      plot_ly() %>%
-        layout(
-          title = "Not enough variables for the 3D view",
-          xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
-          yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE)
+    tryCatch({
+      
+      data <- TEST()$LEARNINGDIFF
+      req(data)
+      
+      y <- data[, 1]
+      X <- data[, -1, drop = FALSE]
+      
+      if(ncol(X) >= 3) {
+        PlotPca3D_interactive(
+          data = X, 
+          y = y, 
+          title = "PCA 3D - selected variables"
         )
-    }
+      } else {
+        plot_ly() %>%
+          layout(
+            title = "Not enough variables for the 3D view",
+            xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+            yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE)
+          )
+      }
+      
+    }, error = function(e) {
+      errorplot(text = "Error generating PCA 3D plot: not enough variables or data issue")
+      #showNotification("Error generating PCA 3D plot: not enough variables or data issue", type = "error")
+    })
   }
 })
 
@@ -4177,7 +4284,11 @@ LEARNING_CURVE_DATA <- eventReactive(input$run_learning_curve, {
 output$plot_lc_auc <- renderPlot({
   lc_data <- LEARNING_CURVE_DATA()
   req(lc_data)
-  plot_learning_curve_multiclass(lc_data, metric = "auc", title = "Learning Curve - AUC")
+  tryCatch({
+    plot_learning_curve_multiclass(lc_data, metric = "auc", title = "Learning Curve - AUC")
+  }, error =  function(e){
+    cat("Error in plot_lc_auc : ", e$message, "\n")
+    })
 })
  
 output$download_lc_auc <- downloadHandler(
@@ -4194,7 +4305,12 @@ output$download_lc_auc <- downloadHandler(
 output$plot_lc_accuracy <- renderPlot({
   lc_data <- LEARNING_CURVE_DATA()
   req(lc_data)
-  plot_learning_curve_multiclass(lc_data, metric = "accuracy", title = "Learning Curve - Accuracy")
+  tryCatch({
+    plot_learning_curve_multiclass(lc_data, metric = "accuracy", title = "Learning Curve - Accuracy")
+  }, error = function(e){
+     errorplot(text = "Error generating learning curve plot: not enough data or issue with model")
+    })
+  
 })
  
 output$download_lc_auc <- downloadHandler(

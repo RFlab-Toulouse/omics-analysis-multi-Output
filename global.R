@@ -233,6 +233,7 @@ gg_color_hue <- function(n) {
   hues = seq(15, 375, length=n+1)
   hcl(h=hues, l=65, c=100)[1:n]
 }
+
 transformdata<-function(toto,transpose,zeroegalNA){
   if(transpose){
     toto<-t(toto)
@@ -1889,7 +1890,6 @@ multivariateselection<-function(toto, method="lasso", lambda=NULL, alpha=0.5, nl
   } else {
     y_glmnet <- y
   }
-  
 
   # Guards before cv.glmnet
   if(ncol(x) == 0 || nrow(x) == 0){
@@ -1910,8 +1910,8 @@ multivariateselection<-function(toto, method="lasso", lambda=NULL, alpha=0.5, nl
     cvfit <- tryCatch({
       suppressWarnings(cv.glmnet(x, y_glmnet, family="multinomial",
                                  alpha=alpha, nlambda=nlambda,
-                                 type.measure="class", nfolds=safe_nfolds,
-                                 type.multinomial="ungrouped"))
+                                 type.measure="deviance", nfolds=safe_nfolds,
+                                 type.multinomial="grouped"))
     }, error = function(e){
       cat(sprintf("[multivariateselection] cv.glmnet failed: %s\n", e$message))
       return(NULL)
@@ -2872,7 +2872,7 @@ tune_elasticnet_gridsearch <- function(X, y, param_grid = NULL, n_folds = 5, sco
   }
 
   # Create trainer object
-  lm_trainer <- LMTrainer$new(family = "binomial")
+  lm_trainer <- LMTrainer$new(family = "multinomial")
 
   # Create GridSearchCV object
   gst <- GridSearchCV$new(
@@ -3466,7 +3466,7 @@ run_all_models <- function(learningmodel, validation, transformdataparameters,
     )
     
     out <- tryCatch(
-      modelfunction(learningmodel = learningmodel,
+      modelfunction_MC(learningmodel = learningmodel,
                     validation = validation,
                     modelparameters = modelparameters,
                     transformdataparameters = transformdataparameters,
@@ -4190,8 +4190,22 @@ create_stratified_folds <- function(y, k = 5, seed = 20011203) {
   return(folds)
 }
 
+make_stratified_foldid <- function(y, nfolds = 5, seed = 20011203) {
+  min_class_n <- min(table(y))
+  k <- min(as.integer(nfolds), as.integer(min_class_n))
+  set.seed(seed)
+  foldid <- integer(length(y))
+  lev <- if(is.factor(y)) levels(y) else unique(as.character(y))
+  for(cl in lev){
+    idx <- which(y == cl)
+    foldid[sample(idx)] <- rep_len(seq_len(k), length(idx))
+  }
+  return(list(foldid = foldid, k = k))
+}
 
-modelfunction <- function(learningmodel, validation, modelparameters, 
+
+
+modelfunction_MC <- function(learningmodel, validation, modelparameters, 
                           transformdataparameters, datastructuresfeatures, 
                           learningselect = NULL, train_params = NULL) {
   if(modelparameters$modeltype!="nomodel"){ 
@@ -4529,7 +4543,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
     if(modelparameters$modeltype == "elasticnet"){
       cat("\n--- Training ElasticNet ---\n")
       
-      x <- as.matrix(learningmodel[,-1])
+      x <- as.matrix(data.matrix(learningmodel[,-1]))
       
       # Déterminer la famille
       if(is_binary) {
@@ -4595,28 +4609,155 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       if(is.null(lambda_param)){
         # Perform cross-validation
         cat("  Performing cross-validation for lambda...\n")
-        set.seed(20011203)
-        cvfit <- suppressWarnings(cv.glmnet(x, y, 
-                           family = family_param, 
-                           alpha = alpha_param,
-                           type.measure = type_measure, 
-                           nfolds = 5 #min(5, nrow(learningmodel)-1)
-                           ))
+        # Merge classes with < 3 obs into nearest class FOR CV ONLY (to find lambda)
+        class_counts_cv <- table(y)
+        y_cv <- y
+        small_for_cv <- names(class_counts_cv[class_counts_cv < 10])
+        if(length(small_for_cv) > 0){
+          cat(sprintf("  [CV] Merging %d small class(es) for lambda search: %s\n",
+                      length(small_for_cv), paste(small_for_cv, collapse=", ")))
+          lev_cv <- levels(y_cv)
+          for(sc in small_for_cv){
+            idx_sc <- which(lev_cv == sc)
+            target  <- if(idx_sc == length(lev_cv)) lev_cv[idx_sc-1] else lev_cv[idx_sc+1]
+            levels(y_cv)[levels(y_cv) == sc] <- target
+          }
+          y_cv <- droplevels(y_cv)
+        }
+        min_n_cv <- min(table(y_cv))
+        if(min_n_cv >= 10){
+          # Branch 1: min class >= 10 (>=8 per fold with 5 folds) - stratified CV possible
+          strat <- make_stratified_foldid(y_cv, nfolds = 5, seed = 20011203)
+          cat(sprintf("  Stratified CV: %d folds (min class size = %d)\n",
+                      strat$k, min_n_cv))
+          cvfit <- tryCatch(
+            withCallingHandlers(
+              cv.glmnet(x, y_cv,
+                         family       = family_param,
+                         alpha        = alpha_param,
+                         type.measure = type_measure,
+                         foldid       = strat$foldid),
+              warning = function(w){
+                if(grepl("fewer than 8|dangerous ground", conditionMessage(w)))
+                  invokeRestart("muffleWarning")
+              }
+            ),
+            error = function(e){
+              cat(sprintf("  [CV] cv.glmnet failed (%s), falling back to fixed lambda\n", e$message))
+              full_fit <- suppressWarnings(glmnet(x, y_cv, family=family_param, alpha=alpha_param, nlambda=50))
+              list(lambda.min = full_fit$lambda[max(1, round(length(full_fit$lambda)*0.3))],
+                   lambda.1se = full_fit$lambda[max(1, round(length(full_fit$lambda)*0.1))],
+                   is_fallback = TRUE)
+            }
+          )
+        } else {
+          cat(sprintf("  [CV skipped] min class size = %d < 8, using fixed lambda\n", min_n_cv))
+          cat(sprintf("  [CV skipped] min class size = %d < 3, using fixed lambda\n", min_n_cv))
+          full_fit <- suppressWarnings(glmnet(x, y_cv, family=family_param, alpha=alpha_param, nlambda=50))
+          cvfit <- list(lambda.min = full_fit$lambda[max(1, round(length(full_fit$lambda)*0.3))],
+                        lambda.1se = full_fit$lambda[max(1, round(length(full_fit$lambda)*0.1))],
+                        is_fallback = TRUE)
+        }
         lambda_param <- cvfit$lambda.min
-        model <- list(glmnet_model = cvfit, 
-                      lambda = lambda_param, 
+        # Fit final model on ORIGINAL y (all classes) using lambda found from CV
+       
+        # fit_final <- suppressWarnings(glmnet(x, y,
+        #                                      family = family_param,
+        #                                      alpha  = alpha_param,
+        #                                      lambda = lambda_param))
+        
+        
+        # --- SMOTE-like oversampling : garantir >= nfolds obs par classe ---
+        # Fit final model on ORIGINAL y (all classes) using lambda found from CV
+        min_obs_required <- 5L
+        
+        original_levels <- levels(y)
+        
+        y_aug <- factor(as.character(y), levels = original_levels)
+        x_aug <- x
+        
+        # Compter les obs réelles par classe (incluant les classes à 0)
+        class_counts_final <- setNames(integer(length(original_levels)), original_levels)
+        tbl_y <- table(as.character(y_aug))
+        for (cl in names(tbl_y)) class_counts_final[cl] <- as.integer(tbl_y[cl])
+        
+        cat(sprintf("  [Final fit] Class distribution before oversampling: %s\n",
+                    paste(names(class_counts_final), class_counts_final, sep = "=", collapse = ", ")))
+        
+        small_classes_final <- names(class_counts_final[class_counts_final < min_obs_required])
+        
+        if (length(small_classes_final) > 0) {
+          cat(sprintf("  [Final fit] Oversampling %d small class(es): %s\n",
+                      length(small_classes_final),
+                      paste(small_classes_final, collapse = ", ")))
+          
+          for (cl in small_classes_final) {
+            n_have <- class_counts_final[cl]
+            n_add  <- min_obs_required - n_have
+            cat(sprintf("  [Final fit]   '%s': %d obs -> adding %d\n", cl, n_have, n_add))
+            
+            if (n_have == 0) {
+              # Classe absente du split : piocher dans learningmodel global
+              idx_global <- which(as.character(learningmodel[, 1]) == cl)
+              if (length(idx_global) == 0) {
+                cat(sprintf("  [Final fit] WARNING: class '%s' has 0 obs globally, skipping\n", cl))
+                next
+              }
+              set.seed(20011203)
+              idx_extra <- sample(idx_global, min_obs_required, replace = TRUE)
+              x_extra   <- as.matrix(data.matrix(learningmodel[idx_extra, -1]))
+              x_extra   <- x_extra[, colnames(x_aug), drop = FALSE]
+              y_extra   <- rep(cl, min_obs_required)
+            } else {
+              # Classe présente mais insuffisante : dupliquer ses obs existantes
+              idx_cl    <- which(as.character(y_aug) == cl)
+              set.seed(20011203)
+              idx_extra <- sample(idx_cl, n_add, replace = TRUE)
+              x_extra   <- x_aug[idx_extra, , drop = FALSE]
+              y_extra   <- rep(cl, n_add)
+            }
+            
+            x_aug <- rbind(x_aug, x_extra)
+            y_aug <- factor(
+              c(as.character(y_aug), as.character(y_extra)),
+              levels = original_levels
+            )
+          }
+          
+          cat(sprintf("  [Final fit] Augmented dataset: %d obs — %s\n",
+                      length(y_aug),
+                      paste(original_levels,
+                            as.integer(table(factor(as.character(y_aug), levels = original_levels))),
+                            sep = "=", collapse = ", ")))
+        }
+        
+        # Vérification finale avant glmnet
+        counts_check <- as.integer(table(factor(as.character(y_aug), levels = original_levels)))
+        if (any(counts_check < 1)) {
+          stop(sprintf("[Final fit] FATAL: class(es) still empty after oversampling: %s",
+                       paste(original_levels[counts_check < 1], collapse = ", ")))
+        }
+        
+        fit_final <- suppressWarnings(glmnet(x_aug, y_aug,
+                                             family = family_param,
+                                             alpha  = alpha_param,
+                                             lambda = lambda_param))
+        
+        model <- list(glmnet_model = fit_final,
+                      lambda = lambda_param,
                       alpha = alpha_param,
-                      cvfit = cvfit, 
-                      optimal_lambda = lambda_param, 
+                      cvfit = cvfit,
+                      optimal_lambda = lambda_param,
                       lambda_1se = cvfit$lambda.1se)
+        
         cat("  Optimal lambda:", lambda_param, "\n")
       } else {
         # Manual lambda
         cat("  Using manual lambda:", lambda_param, "\n")
-        fit <- glmnet(x, y, 
+        fit <- suppressWarnings(glmnet(x, y, 
                       family = family_param, 
                       alpha = alpha_param, 
-                      lambda = lambda_param)
+                      lambda = lambda_param))
         model <- list(glmnet_model = fit, 
                       lambda = lambda_param, 
                       alpha = alpha_param,
@@ -4648,37 +4789,71 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         if(length(selected_features) > 0){
           cat("  Selected", length(selected_features), "features\n")
           learningmodel <- learningmodel[, c("group", selected_features)]
-          x <- as.matrix(learningmodel[,-1])
+          x <- as.matrix(data.matrix(learningmodel[,-1]))
           
           # Refit model with selected features
+          # Refit model with selected features
           if(is.null(modelparameters$lambda)){
-            cvfit <-  suppressWarnings(cv.glmnet(x, y, 
-                                                 family = family_param, 
-                                                 alpha = alpha_param,
-                                                 type.measure = type_measure, 
-                                                 nfolds = min(5, nrow(learningmodel)-1))) 
-            lambda_param <- cvfit$lambda.min
-            fit <- glmnet(x, y, 
-                          family = family_param, 
-                          alpha = alpha_param, 
-                          lambda = lambda_param)
-            model <- list(glmnet_model = fit, 
-                          lambda = lambda_param, 
-                          alpha = alpha_param,
-                          cvfit = cvfit, 
-                          optimal_lambda = lambda_param, 
-                          lambda_1se = cvfit$lambda.1se)
+            y_cv_rf  <- y
+            small_rf <- names(table(y)[table(y) < 10])
+            if(length(small_rf) > 0){
+              lev_rf <- levels(y_cv_rf)
+              for(sc in small_rf){
+                idx_sc <- which(lev_rf == sc)
+                target  <- if(idx_sc == length(lev_rf)) lev_rf[idx_sc-1] else lev_rf[idx_sc+1]
+                levels(y_cv_rf)[levels(y_cv_rf) == sc] <- target
+              }
+              y_cv_rf <- droplevels(y_cv_rf)
+            }
+            min_n_rf <- min(table(y_cv_rf))
+            if(min_n_rf >= 10){
+
+              # Branch 1: stratified CV for refit
+              strat_refit <- make_stratified_foldid(y_cv_rf, nfolds = 5, seed = 20011203)
+              cvfit_rf <- tryCatch(
+                withCallingHandlers(
+                  cv.glmnet(x, y_cv_rf,
+                             family       = family_param,
+                             alpha        = alpha_param,
+                             type.measure = type_measure,
+                             foldid       = strat_refit$foldid),
+                  warning = function(w){
+                    if(grepl("fewer than 8|dangerous ground", conditionMessage(w)))
+                      invokeRestart("muffleWarning")
+                  }
+                ),
+                error = function(e){
+                  cat(sprintf("  [Refit CV] failed (%s), fixed lambda\n", e$message))
+                  ff <- suppressWarnings(glmnet(x, y_cv_rf, family=family_param, alpha=alpha_param, nlambda=50))
+                  list(lambda.min = ff$lambda[max(1,round(length(ff$lambda)*0.3))],
+                       lambda.1se = ff$lambda[max(1,round(length(ff$lambda)*0.1))])
+                }
+              )
+            } else {
+              # Branch 2: CV impossible, fixed lambda
+              cat(sprintf("  [Refit CV skipped] min class = %d < 3, fixed lambda\n", min_n_rf))
+              ff <- suppressWarnings(glmnet(x, y_cv_rf, family=family_param, alpha=alpha_param, nlambda=50))
+              cvfit_rf <- list(lambda.min = ff$lambda[max(1,round(length(ff$lambda)*0.3))],
+                               lambda.1se = ff$lambda[max(1,round(length(ff$lambda)*0.1))])
+            }
+            lambda_param <- cvfit_rf$lambda.min
+            fit <- tryCatch(
+              suppressWarnings(glmnet(x, y, family=family_param, alpha=alpha_param, lambda=lambda_param)),
+              error = function(e){
+                cat(sprintf("  [Refit glmnet] failed (%s)\n", e$message))
+                NULL
+              }
+            )
+            if(!is.null(fit)){
+              model <- list(glmnet_model = fit, lambda = lambda_param, alpha = alpha_param,
+                            cvfit = cvfit_rf, optimal_lambda = lambda_param,
+                            lambda_1se = cvfit_rf$lambda.1se)
+            }
+            # else: keep existing model from initial fit
           } else {
-            fit <- glmnet(x, y, 
-                          family = family_param, 
-                          alpha = alpha_param, 
-                          lambda = lambda_param)
-            model <- list(glmnet_model = fit, 
-                          lambda = lambda_param, 
-                          alpha = alpha_param,
-                          cvfit = NULL, 
-                          optimal_lambda = lambda_param, 
-                          lambda_1se = NULL)
+            fit <- suppressWarnings(glmnet(x, y, family=family_param, alpha=alpha_param, lambda=lambda_param))
+            model <- list(glmnet_model = fit, lambda=lambda_param, alpha=alpha_param,
+                          cvfit=NULL, optimal_lambda=lambda_param, lambda_1se=NULL)
           }
         } else {
           cat("  Warning: No features selected, keeping all features\n")
@@ -4707,10 +4882,17 @@ modelfunction <- function(learningmodel, validation, modelparameters,
           score_array <- glmnet:::predict.cv.glmnet(model$glmnet_model, newx = x, 
                                                     s = lambda_param, type = "response")
         } else {
-          score_array <- glmnet::predict.glmnet(model$glmnet_model, newx = x, 
-                                                s = lambda_param, type = "response")
+          # Classification multi-classe: use predict() for correct S3 dispatch to predict.multnet
+          # (glmnet::predict.glmnet called directly bypasses dispatch; beta is a list for multnet)
+          cat("affichage du contenu de model$glmnet_model  : \n")
+          print(class(model$glmnet_model))
+          score_array <- glmnet:::predict.multnet(model$glmnet_model, newx = x,
+                                                          s = lambda_param, type = "response")
         }
         
+        cat(" type of score_array : \n")
+        print(class(score_array))
+        print(head(score_array))
         # Extraire la matrice 2D
         if(is.array(score_array) && length(dim(score_array)) == 3) {
           scorelearning <- score_array[,,1]
@@ -4741,7 +4923,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
     if(modelparameters$modeltype == "xgboost"){
       cat("\n--- Training XGBoost ---\n")
       
-      x <- as.matrix(learningmodel[,-1])
+      x <- as.matrix(data.matrix(learningmodel[,-1]))
       
       if(is_binary) {
         y <- ifelse(learningmodel[,1] == lev["positif"], 1, 0)
@@ -5142,10 +5324,60 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         }
       }
       
+      # --- Oversampling avant NaiveBayes : garantir >= 2 obs par classe ---
+      min_obs_required <- 2L
+      original_levels  <- levels(learningmodel[, 1])
+      cat("original_levels : \n")
+      print(original_levels)
+      y_aug <- factor(as.character(learningmodel[, 1]),          
+                      levels = original_levels)
+      x_aug <- learningmodel[, -1]
+      
+      
+      class_counts_nb <- setNames(integer(length(original_levels)), original_levels)
+      tbl_nb <- table(as.character(y_aug))
+      for (cl in names(tbl_nb)) class_counts_nb[cl] <- as.integer(tbl_nb[cl])
+      
+      small_classes_nb <- names(class_counts_nb[class_counts_nb < min_obs_required])
+      
+      if (length(small_classes_nb) > 0) {
+        cat(sprintf("  [NB] Oversampling %d small class(es): %s\n",
+                    length(small_classes_nb),
+                    paste(small_classes_nb, collapse = ", ")))
+        for (cl in small_classes_nb) {
+          n_have <- class_counts_nb[cl]
+          n_add  <- min_obs_required - n_have
+          if (n_have == 0) {
+            idx_src <- which(as.character(learningmodel[, 1]) == cl)
+            if (length(idx_src) == 0) next
+          } else {
+            idx_src <- which(as.character(y_aug) == cl)
+          }
+          set.seed(20011203)
+          idx_extra <- sample(idx_src, n_add, replace = TRUE)
+          x_aug <- rbind(x_aug, x_aug[idx_extra, , drop = FALSE])
+          y_aug <- factor(
+            c(as.character(y_aug), rep(cl, n_add)),
+            levels = original_levels
+          )
+        }
+      }
+      
+      # Reconstruire learningmodel augmenté pour naiveBayes
+      original_colnames <- colnames(learningmodel)
+      learningmodel_aug <- data.frame(y_aug, x_aug, check.names = FALSE)
+      colnames(learningmodel_aug) <- original_colnames
+      
+      model <- naiveBayes(
+        as.formula(paste(colnames(learningmodel)[1], "~ .")),
+        data   = learningmodel_aug,
+        laplace = modelparameters$laplace
+      )
+      
       # Build model
-      model <- naiveBayes(x = learningmodel[,-1], 
-                          y = learningmodel[,1], 
-                          laplace = optimal_laplace)
+      # model <- naiveBayes(x = learningmodel[,-1], 
+      #                     y = learningmodel[,1], 
+      #                     laplace = optimal_laplace)
       
       model$model_type <- "naivebayes"
       model$optimal_laplace <- optimal_laplace
@@ -5154,6 +5386,9 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       
       # Make predictions
       pred_probs <- e1071:::predict.naiveBayes(model, learningmodel[,-1], type = "raw")
+      cat("dim of pred_probs  naive nayesien :  ")
+      print(dim(pred_probs))
+      print(head(pred_probs))
       
       if(is_binary) {
         scorelearning <- data.frame(pred_probs[, lev["positif"]])
@@ -5163,11 +5398,35 @@ modelfunction <- function(learningmodel, validation, modelparameters,
         predictclasslearning[which(scorelearning >= modelparameters$thresholdmodel)] <- lev["positif"]
         predictclasslearning[which(scorelearning < modelparameters$thresholdmodel)] <- lev["negatif"]
       } else {
+        
+        # Pour multi-classe, créer une matrice de probabilités approximative
+        # scorelearning <- matrix(0, nrow = nrow(learningmodel), ncol = n_classes)
+        # for(i in 1:nrow(scorelearning)) {
+        #   class_idx <- which(lev == pred_probs[i])
+        #   scorelearning[i, class_idx] <- pred_probs[i, ]
+        #   # Distribuer le reste uniformément
+        #   other_idx <- setdiff(1:n_classes, class_idx)
+        #   if(length(other_idx) > 0) {
+        #     scorelearning[i, other_idx] <- (1 - pred_probs[i]) / length(other_idx)
+        #   }
+        # }
+        # colnames(scorelearning) <- paste("Prob", lev, sep="_")
+        # 
+        # predictclasslearning <- pred_probs
+        
+        cat("checking the problem of lev in NB modele :\n")
+        print(lev)
         scorelearning <- pred_probs
         colnames(scorelearning) <- paste("Prob", lev, sep="_")
-        
+
         class_indices <- apply(scorelearning, 1, which.max)
+        cat("class_indices  : \n")
+        print(class_indices)
+        cat(" factor(lev[class_indices], levels = lev) : \n")
+        print(factor(lev[class_indices], levels = lev))
         predictclasslearning <- factor(lev[class_indices], levels = lev)
+        cat('In the else of predictclasslearning, show dimension : \n')
+        print(length(predictclasslearning))
       }
       predictclasslearning <- as.factor(predictclasslearning)
     }
@@ -5294,6 +5553,8 @@ modelfunction <- function(learningmodel, validation, modelparameters,
                                       prob = TRUE)
       
       probs <- attr(predicted_classes, "prob")
+      cat('affichage de la tete de probs apres la prediction :  KNN \n')
+      print(head(probs))
       
       if(is_binary) {
         # Pour binaire, prob est la proba de la classe prédite
@@ -5330,6 +5591,11 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       colnames(reslearningmodel) <- c("classlearning", "scorelearning", "predictclasslearning")
     } else {
       # Format multi-classe
+      cat("affichage de la dim de classlearning :  \n")
+      print(length(classlearning))
+      print(dim(scorelearning))
+      print(length(predictclasslearning))
+      
       reslearningmodel <- data.frame(classlearning, scorelearning, predictclasslearning)
       # reslearningmodel <- list(
       #   "classlearning" = classlearning,
@@ -5501,7 +5767,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
             score_array <- glmnet:::predict.cv.glmnet(model$glmnet_model, newx=x_val, 
                                                       s=model$lambda, type="response")
           } else {
-            score_array <- glmnet::predict.glmnet(model$glmnet_model, newx=x_val, 
+            score_array <- glmnet:::predict.multnet(model$glmnet_model, newx=x_val, 
                                                   s=model$lambda, type="response")
           }
           
@@ -5637,8 +5903,8 @@ modelfunction <- function(learningmodel, validation, modelparameters,
       rownames(resvalidationmodel) <- rownames(validationmodel)
       
       datavalidationmodel <- list(
-        "validationmodel" = validationmodel,  # contient les features et la classe
-        "resvalidationmodel" = resvalidationmodel # contient les résultats de la prédiction
+        "validationmodel" = validationmodel,  
+        "resvalidationmodel" = resvalidationmodel 
       )
       
       cat("Validation samples:", nrow(validationmodel), "\n")
@@ -5665,7 +5931,7 @@ modelfunction <- function(learningmodel, validation, modelparameters,
 }
 
 
-# modelfunction <- function(learningmodel, validation, modelparameters, 
+# modelfunction_MC <- function(learningmodel, validation, modelparameters, 
 #                           transformdataparameters, datastructuresfeatures, 
 #                           learningselect = NULL) {
 #   if(modelparameters$modeltype!="nomodel"){ 
@@ -7084,10 +7350,10 @@ ROCcurve <- function(validation, decisionvalues, maintitle="ROC Curves (One-vs-A
   # ROC curve for multi-class (One-vs-All approach)
   
   cat("=======================================================================\n")
-  cat(" show decisionvalues  : \n ")
-  print(decisionvalues)
-  cat("validation :  \n")
-  print(validation)
+  # cat(" show decisionvalues  : \n ")
+  # print(decisionvalues)
+  # cat("validation :  \n")
+  # print(validation)
   cat("=======================================================================\n")
   
   validation <- factor(validation, levels = rev(levels(validation)), ordered = TRUE)
@@ -7621,12 +7887,11 @@ specificity_multiclass <- function(predicted, actual) {
   
   return(round(mean(spec_vec, na.rm = TRUE), 3))
 } 
+
 # Fonction pour matrice de confusion multi-classe
 confusion_matrix_multiclass <- function(predicted, actual, normalize = FALSE, graph = TRUE) {
-  # Créer la matrice de confusion
   conf_mat <- table(Predicted = predicted, Actual = actual)
   
-  # Normalisation optionnelle
   if(normalize) {
     # Normalisation par colonne (vraie classe)
     conf_mat <- sweep(conf_mat, 2, colSums(conf_mat), "/")
@@ -7774,7 +8039,7 @@ testparametersfunction<-function(learning,validation,tabparameters){
       shiny::validate(need(ncol(learning)!=0,"No select dataset"))
       
       # Execute model training
-      out<- tryCatch(modelfunction(learningmodel = learningmodel,
+      out<- tryCatch(modelfunction_MC(learningmodel = learningmodel,
                                    validation = validation,
                                    modelparameters = modelparameters,
                                    transformdataparameters = transformdataparameters,
@@ -8226,7 +8491,7 @@ PlotPca_Combined <- function(data, y, title_prefix = "PCA") {
 #     
 #     tryCatch({
 #       # Train on subset
-#       model <- modelfunction(
+#       model <- modelfunction_MC(
 #         learningmodel = cbind(y_subset, x_subset),
 #         validation = NULL,
 #         modelparameters = temp_params,
@@ -8249,7 +8514,7 @@ PlotPca_Combined <- function(data, y, title_prefix = "PCA") {
 #           x_test_cv <- x_subset[test_idx, ]
 #           y_test_cv <- y_subset[test_idx]
 #           
-#           model_cv <- modelfunction(
+#           model_cv <- modelfunction_MC(
 #             learningmodel = cbind(y_train_cv, x_train_cv),
 #             validation = NULL,
 #             modelparameters = temp_params,
@@ -8436,7 +8701,7 @@ learning_curve_multiclass <- function(learningmodel, modelparameters,
     dat[, 1] <- factor(dat[, 1], levels = lev)
     
     tryCatch(
-      modelfunction(
+      modelfunction_MC(
         learningmodel          = dat,
         validation             = NULL,
         modelparameters        = mp,
@@ -9046,7 +9311,7 @@ score_plot_single_class <- function(actual, scores, cl, set_name = "Training", t
       axis.title.y     = element_text(size = 15, face = "bold"),
       axis.title       = element_text(size = 14, face = "bold"),
       panel.grid.major = element_blank(),  
-      panel.grid.minor = element_blank(), 
+      panel.grid.minor = element_blank()
     )
 }
 
