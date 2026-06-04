@@ -1248,6 +1248,9 @@ shinyUI(fluidPage(
                                             helpText("Shows how model performance evolves as training set size increases.",
                                                      "A large gap between training and CV curves indicates overfitting.",
                                                      "Convergence of the two curves suggests underfitting or insufficient data."),
+                                            helpText(HTML("<span style='color:#7f8c8d'><b>Methodology :</b> The plot uses the fixed hyperparameters of the model selected in the tab <i>Model</i> (no re-tuning by fold). 
+                                                          Transformations (standardisation, imputation) are calculated once for the entire input data set, and are not re-estimated within each fold. 
+                                                          CV scores for small sample sizes may therefore be slightly optimistic.</span>")),
                                             hr(),
                                             fluidRow(
                                               column(4,
@@ -1352,10 +1355,10 @@ shinyUI(fluidPage(
                                            )
                                          ),
                                          hr(),
-                                         h4("DeLong Test (AUC Comparison)"),
-                                         helpText("Statistical test comparing AUC between pairs of models (p-value < 0.05 = significant difference)."),
-                                         dataTableOutput("delong_test_table") %>% withSpinner(color="#0dc5c1",type = 1),
-                                         p(downloadButton("download_delong_table", "Download DeLong results"), align = "center"),
+                                         # h4("DeLong Test (AUC Comparison)"),
+                                         # helpText("Statistical test comparing AUC between pairs of models (p-value < 0.05 = significant difference)."),
+                                         # dataTableOutput("delong_test_table") %>% withSpinner(color="#0dc5c1",type = 1),
+                                         # p(downloadButton("download_delong_table", "Download DeLong results"), align = "center"),
                                          hr(),
                                          h4("DeLong Test — FDR Corrected (Benjamini-Hochberg)"),
                                          helpText("P-values adjusted for multiple pairwise comparisons using the Benjamini-Hochberg method."),
@@ -1426,9 +1429,9 @@ shinyUI(fluidPage(
                                                          column(4,
                                                                 radioButtons("adv_viz_data_source", "Data source:",
                                                                              c("Transformed data" = "transformed",
-                                                                               "Selected variables (test)" = "selected",
+                                                                               # "Selected variables (test)" = "selected",
                                                                                "Model variables" = "model"),
-                                                                             selected = "transformed")
+                                                                             selected = "model")
                                                          ),
                                                          column(4,
                                                                 numericInput("tsne_perplexity", "t-SNE perplexity", 30, min = 5, max = 100, step = 5),
